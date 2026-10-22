@@ -1,9 +1,6 @@
-"""Process-pool job execution and the cross-process event bridge.
+"""Process pool for heavy jobs, plus the queue that brings worker events back to the bus.
 
-CPU-heavy work (generation, pipelines, verification) runs in worker processes so the API
-stays responsive and runs are isolated from each other. One task per worker process
-(`max_tasks_per_child=1`) gives every run a fresh process: no allocator memory carried
-over between runs, so per-run RSS measurements are clean.
+Each job gets a fresh process, so memory numbers from one run never leak into the next.
 """
 
 import asyncio

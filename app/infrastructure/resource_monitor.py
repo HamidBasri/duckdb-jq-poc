@@ -1,9 +1,4 @@
-"""Per-stage resource measurement for the current process and its child processes.
-
-DuckDB runs in-process (multi-threaded); jq runs as child processes. Sampling the whole
-process tree measures both the same way. CPU time comes from `getrusage`, which (unlike
-psutil on macOS) includes reaped children, so jq's CPU is counted too.
-"""
+"""Measures wall time, CPU time and peak memory for a stage, including jq child processes."""
 
 import logging
 import resource

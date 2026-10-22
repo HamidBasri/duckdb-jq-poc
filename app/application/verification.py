@@ -1,10 +1,8 @@
-"""Semantic equivalence check of two runs' outputs (proof both engines did the same work).
+"""Checks that two runs produced the same output.
 
-Documents are matched by key, not by line order or formatting: engines legitimately differ
-in key order, `1.0` vs `1` and row order. Floats are compared with a cent-level tolerance
-because summation order differs between a parallel engine and a sequential one.
-Large outputs are compared on a deterministic hash-based sample; row counts and a digest of
-every key are always checked in full.
+Documents are matched by key, not by line, and floats get a one-cent tolerance because the
+engines add numbers up in a different order. Big outputs are compared on a fixed sample;
+row counts and keys are always checked in full.
 """
 
 import hashlib

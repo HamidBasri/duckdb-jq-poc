@@ -1,4 +1,4 @@
-"""Headless entrypoint reusing the same container as the API.
+"""Generate datasets and run benchmarks from the terminal.
 
 uv run python -m app.cli generate --sizes 5k 50k 500k 1m 5m
 uv run python -m app.cli benchmark --sizes 5k 50k 500k --format parquet

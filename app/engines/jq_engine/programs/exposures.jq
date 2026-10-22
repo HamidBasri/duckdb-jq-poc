@@ -1,10 +1,6 @@
-# Aggregate (streaming reduce): live exposure per ultimate parent with nested breakdowns.
-#
-# jq performance notes, measured on 100k real trade documents:
-#   * Project each document to the few fields needed BEFORE the reduce: ~4.5x faster than
-#     reducing over the full ~1.2 KB documents.
-#   * Use direct path updates (.[$k].x += n), not `.[$k] |= (...)` (copies the sub-object).
-#   * Avoid flat composite string keys (.m["\($a)|\($b)"]): ~20x slower than nested paths.
+# Aggregate: live exposure per ultimate parent, with breakdowns by currency and counterparty.
+# Each document is cut down to the fields we need before the reduce. On 100k documents that
+# was 2.6x faster than reducing over the full documents.
 include "lib";
 
 def breakdown($key):

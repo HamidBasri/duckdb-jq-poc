@@ -1,8 +1,4 @@
-"""Domain records: datasets, pipeline runs, comparisons and benchmarks.
-
-Pydantic models are used for records because they are persisted as JSON and exposed
-over the API unchanged; keeping one representation avoids a mapping layer in a POC.
-"""
+"""Records for datasets, runs, comparisons and benchmarks, saved as JSON and returned by the API."""
 
 from datetime import UTC, date, datetime
 from enum import StrEnum

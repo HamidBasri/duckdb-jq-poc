@@ -1,14 +1,4 @@
-"""Event handlers that turn `*Requested` events into background work on the job executor.
-
-Flow (each arrow is an event on the bus):
-
-    DatasetGenerationRequested -> [generate in worker] -> DatasetReady | DatasetFailed
-    DatasetUploaded            -> [inspect in worker]  -> DatasetReady | DatasetFailed
-    ComparisonRequested -> ComparisonStarted
-        per engine: [pipeline in worker] -> RunStarted, StageStarted/StageCompleted x5, RunFinished
-        -> VerificationStarted -> [verify in worker] -> ComparisonCompleted
-    BenchmarkRequested -> per size: ensure dataset, run comparison, BenchmarkProgressed -> BenchmarkCompleted
-"""
+"""Event handlers that turn *Requested events into background jobs."""
 
 import asyncio
 import logging

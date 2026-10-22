@@ -1,8 +1,6 @@
-"""Builds the SQL that reads a raw source file into the all-text landing schema.
+"""SQL that reads a source file into the raw schema, with every column as text.
 
-Both engines use it: DuckDB loads the result into a table; the jq engine has DuckDB write
-it out as NDJSON, because jq cannot read CSV or Parquet itself (that conversion is timed
-as part of jq's ingest stage).
+The jq engine uses it too, through DuckDB, because jq can't read CSV or Parquet.
 """
 
 from pathlib import Path

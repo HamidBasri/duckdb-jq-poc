@@ -1,9 +1,8 @@
-"""jq implementation of the five pipeline stages.
+"""jq version of the pipeline.
 
-jq is a stream processor: one record in, zero or more out. Anything that needs to see
-the whole dataset (de-duplication, reference resolution, forward references, grouping)
-must hold state in memory, and anything that needs two views of the data needs two
-passes. Each pass is a separate jq process over NDJSON files in the run's work dir.
+jq reads one record at a time, so any step that needs the whole dataset (duplicates, links
+between rows, grouping) has to keep state in memory or read the data again. Each pass is a
+separate jq process over NDJSON files.
 """
 
 import json

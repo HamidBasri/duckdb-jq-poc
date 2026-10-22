@@ -1,8 +1,4 @@
-"""JSON-file repositories with an in-memory cache.
-
-State lives on disk so results survive restarts and datasets stay self-describing (each
-dataset folder carries its `manifest.json`). All access happens on the event-loop thread.
-"""
+"""Saves records as JSON files and keeps them in memory. Only the event loop thread uses it."""
 
 import os
 from collections.abc import Callable

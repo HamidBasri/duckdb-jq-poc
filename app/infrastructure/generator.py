@@ -1,15 +1,8 @@
-"""Deterministic synthetic trade-dataset generator.
+"""Builds the synthetic trade dataset.
 
-Produces five related entities with the cross-references the pipelines must resolve:
-
-    trade -> counterparty -> parent counterparty -> ... (forest, configurable depth, injected cycles)
-    trade -> instrument -> issuer counterparty / underlying instrument
-    trade -> book, trade.currency -> fx rate
-    trade -> previous trade (amendment chains; mostly backward, some forward references)
-
-and with realistic dirt (format variants, missing values, broken references, duplicates)
-proportional to `dirty_rate`. Everything is vectorised with numpy so 5M rows stay cheap,
-and a fixed seed reproduces the exact same files.
+Five linked tables with the problems the pipeline has to handle: amendment chains, deep
+counterparty trees with a few loops, broken links, duplicates and messy values. The same
+spec always gives the same files.
 """
 
 import logging

@@ -408,11 +408,11 @@ async function loadRows() {
       const text = row.state === "duplicate" ? `Copy of row ${fmtN(row.duplicate_of_row)}` : reasons.map((c) => CODES[c] ?? c).join("; ");
       return `<tr tabindex="0" data-row="${row.source_row}" aria-selected="${row.source_row === view.row}">
         <td class="num">${fmtN(row.source_row)}</td>
-        <td class="id">${esc(row.trade_id ?? "—")}</td>
+        <td class="id">${esc(row.trade_id ?? "–")}</td>
         <td>${pill(row.state)}</td>
-        <td>${row.stopped_at ? esc(row.stopped_at) : '<span class="muted">—</span>'}</td>
-        <td class="reasons">${text ? esc(text) : '<span class="muted">—</span>'}</td>
-        <td class="id">${row.exposure_group ? esc(row.exposure_group) : row.state === "delivered" ? '<span class="muted" title="Replaced by a later version, or a cancellation">not counted</span>' : '<span class="muted">—</span>'}</td></tr>`;
+        <td>${row.stopped_at ? esc(row.stopped_at) : '<span class="muted">–</span>'}</td>
+        <td class="reasons">${text ? esc(text) : '<span class="muted">–</span>'}</td>
+        <td class="id">${row.exposure_group ? esc(row.exposure_group) : row.state === "delivered" ? '<span class="muted" title="Replaced by a later version, or a cancellation">not counted</span>' : '<span class="muted">–</span>'}</td></tr>`;
     }).join("")}</tbody></table>`;
   const end = Math.min(view.offset + PAGE, page.total);
   $("#pager").innerHTML = `<span>${fmtN(view.offset + 1)}–${fmtN(end)} of ${fmtN(page.total)} rows</span>

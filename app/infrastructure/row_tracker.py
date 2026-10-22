@@ -1,17 +1,8 @@
-"""Per-row status tracking: where did every raw input row end up, and why?
+"""Builds the per-row status table after a run and reads it back for the tracker.
 
-The pipeline engines work on whole sets of rows, so there is no per-row event to log.
-Instead, after a run finishes, `build_row_status` reconciles the raw source file with the
-run's outputs and writes one record per input row to `row_status.parquet`:
-
-    duplicate     a later copy of a trade_id (first occurrence wins, as in the clean stage)
-    rejected      the trade is in rejects.ndjson (or has no trade_id at all)
-    delivered     the trade is in trades.ndjson
-    filtered_out  valid, but left out by the run's filters
-
-It reads only the source file and the outputs, so it works the same for every engine and
-never touches the timed stages. The byte offset of each delivered document is stored so
-the tracker UI can show the transformed JSON without scanning a multi-GB file.
+The engines process whole sets of rows, so there is no per-row event to log. Instead this
+compares the source file with the run's outputs and records where each row ended up. It only
+reads files, so it works the same for both engines.
 """
 
 import json

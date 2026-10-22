@@ -146,7 +146,7 @@
   <aside>
     <section>
       <h2>Event stream <span class="hint">/api/events</span></h2>
-      <div id="log"><p class="muted" id="log-empty">Waiting for events — generate a dataset or run a comparison.</p></div>
+      <div id="log"><p class="muted" id="log-empty">Nothing yet. Generate a dataset or run a comparison and events show up here.</p></div>
     </section>
   </aside>
 </main>
@@ -179,7 +179,7 @@ function renderDatasets(datasets) {
       <td class="num">${d.size_bytes.parquet ? fmtMB(d.size_bytes.parquet / 1048576) : "-"}</td>
       <td class="num">${d.size_bytes.csv ? fmtMB(d.size_bytes.csv / 1048576) : "-"}</td>
       <td class="num">${fmtS(d.generation_seconds)}</td></tr>`).join("");
-  $("#datasets").innerHTML = datasets.length ? head + rows : `<tr><td class="muted">No datasets yet — generate one above.</td></tr>`;
+  $("#datasets").innerHTML = datasets.length ? head + rows : `<tr><td class="muted">No datasets yet. Generate one above.</td></tr>`;
   const select = $("#dataset-select"), current = select.value;
   select.innerHTML = datasets.filter((d) => d.status === "ready")
     .map((d) => `<option value="${esc(d.dataset_id)}">${esc(d.dataset_id)} (${fmtN(d.row_counts.trades)})</option>`).join("");

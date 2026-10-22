@@ -1,8 +1,4 @@
-"""Pipeline runner: drives an engine through the five stages and measures each one.
-
-Runs inside a worker process. It knows nothing about HTTP or the event bus; it reports
-progress through an `EventSink` and returns a `RunOutcome`.
-"""
+"""Runs one engine through the five stages and measures each one. Runs inside a worker process."""
 
 import json
 import logging

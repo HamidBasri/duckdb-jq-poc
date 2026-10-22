@@ -1,9 +1,8 @@
 -- Transform stage, part 1: resolve cross-references into dimension tables.
 
--- Counterparty hierarchy. DuckDB has no recursive STRUCT type, so an arbitrarily deep
--- `parent -> parent -> ...` object cannot be a STRUCT. Workaround: build it as JSON, top-down
--- from the roots, so each node wraps its parent's already-built JSON. Nodes on (or below) a
--- parent cycle are never reached from a root, which terminates the recursion and flags them.
+-- Counterparty hierarchy. A STRUCT can't contain itself, so the nested parent object is built
+-- as JSON, starting at the roots. Rows inside a parent loop are never reached from a root,
+-- which stops the recursion and lets us flag them.
 CREATE OR REPLACE TABLE dim_counterparty AS
 WITH RECURSIVE tree(counterparty_id, depth, path, ultimate_id, nested, parent_nested) AS (
     SELECT
