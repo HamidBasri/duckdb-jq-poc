@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DuckDB vs jq · Trade Transformation POC</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1d2330; --muted: #667085; --line: #e3e6eb;
+    --duck: #d9a514; --jq: #4f6bd8; --ok: #1f8a4c; --bad: #c2362f; --warn: #b26b00;
+    --ingest: #94a3b8; --clean: #60a5fa; --validate: #a78bfa; --transform: #f59e0b; --aggregate: #10b981;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11141a; --panel: #1a1f27; --ink: #e6e9ef; --muted: #98a2b3; --line: #2a313c; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 17px; margin: 0; }
+  header .sub { color: var(--muted); }
+  .live { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); }
+  .dot.on { background: var(--ok); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px 20px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  h2 .hint { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+  form { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+  label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+  label.inline { flex-direction: row; align-items: center; gap: 5px; color: var(--ink); font-size: 13px; }
+  input, select, button { font: inherit; color: inherit; }
+  input[type=text], input[type=number], input[type=date], select { padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); min-width: 0; }
+  button { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
+  button.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  button:disabled { opacity: .5; cursor: default; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11.5px; border: 1px solid currentColor; }
+  .s-ready, .s-succeeded, .s-completed { color: var(--ok); }
+  .s-failed { color: var(--bad); }
+  .s-pending, .s-queued, .s-running, .s-verifying, .s-preparing { color: var(--warn); }
+  .engine-duckdb { color: var(--duck); font-weight: 600; }
+  .engine-jq { color: var(--jq); font-weight: 600; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+  .card-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .card-head .id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+  .bars { margin-top: 8px; display: grid; grid-template-columns: 70px minmax(0, 1fr) 210px; gap: 6px 10px; align-items: center; }
+  .bar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; background: var(--bg); }
+  .bar span { display: block; height: 100%; min-width: 1px; }
+  .metrics { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .verdict { font-size: 12.5px; margin-top: 6px; }
+  .links a { margin-right: 10px; font-size: 12px; }
+  .err { color: var(--bad); font-size: 12px; white-space: normal; }
+  #log { font-family: ui-monospace, monospace; font-size: 11.5px; max-height: 70vh; overflow-y: auto; }
+  #log div { padding: 3px 0; border-bottom: 1px dashed var(--line); word-break: break-word; }
+  #log b { font-weight: 600; }
+  pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow: auto; max-height: 420px; font-size: 12px; }
+  .muted { color: var(--muted); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>DuckDB vs jq</h1>
+  <span class="sub">Tabular trade data → validated, nested JSON</span>
+  <span class="live"><span id="dot" class="dot"></span><span id="live-label">connecting…</span></span>
+  <a href="/tracker" style="color:var(--ink);font-size:13px">Trade tracker →</a>
+</header>
+<main>
+  <div>
+    <section>
+      <h2>1 · Datasets <span class="hint">synthetic (deterministic by seed) or uploaded CSV/Parquet</span></h2>
+      <form id="gen-form">
+        <label>Rows
+          <select name="rows">
+            <option value="5000">5k</option><option value="50000">50k</option><option value="500000">500k</option>
+            <option value="1000000">1M</option><option value="5000000">5M</option>
+          </select></label>
+        <label>Seed <input type="number" name="seed" value="42" style="width:80px"></label>
+        <label>Dirty rate <input type="number" name="dirty_rate" value="0.02" step="0.01" min="0" max="0.5" style="width:80px"></label>
+        <label>Hierarchy depth <input type="number" name="hierarchy_depth" value="7" min="1" max="1000" style="width:80px"></label>
+        <label>Max chain <input type="number" name="max_chain_length" value="5" min="1" max="500" style="width:80px"></label>
+        <button class="primary">Generate</button>
+        <button type="button" id="presets">Generate all presets</button>
+      </form>
+      <details><summary>Upload your own files</summary>
+        <form id="upload-form" style="margin-top:8px">
+          <label>trades * <input type="file" name="trades" accept=".csv,.parquet" required></label>
+          <label>counterparties <input type="file" name="counterparties" accept=".csv,.parquet"></label>
+          <label>instruments <input type="file" name="instruments" accept=".csv,.parquet"></label>
+          <label>books <input type="file" name="books" accept=".csv,.parquet"></label>
+          <label>fx_rates <input type="file" name="fx_rates" accept=".csv,.parquet"></label>
+          <button class="primary">Upload</button>
+        </form>
+      </details>
+      <div class="table-wrap"><table id="datasets"></table></div>
+    </section>
+
+    <section>
+      <h2>2 · Clean, validate &amp; transform <span class="hint">same pipeline, two engines, verified equivalent</span></h2>
+      <form id="cmp-form">
+        <label>Dataset <select name="dataset_id" id="dataset-select" required></select></label>
+        <label>Source <select name="source_format"><option>parquet</option><option>csv</option></select></label>
+        <label class="inline"><input type="checkbox" name="duckdb" checked> duckdb</label>
+        <label class="inline"><input type="checkbox" name="jq" checked> jq</label>
+        <label>Trade date from <input type="date" name="trade_date_from"></label>
+        <label>to <input type="date" name="trade_date_to"></label>
+        <label>Instrument types <input type="text" name="instrument_types" placeholder="EQUITY,BOND" style="width:120px"></label>
+        <label>Min notional USD <input type="number" name="min_notional_usd" style="width:110px"></label>
+        <label class="inline"><input type="checkbox" name="latest_only"> latest only</label>
+        <label class="inline"><input type="checkbox" name="verify" checked> verify</label>
+        <label class="inline"><input type="checkbox" name="parallel_engines"> parallel</label>
+        <button class="primary">Run</button>
+      </form>
+      <div class="legend" id="legend"></div>
+      <div id="comparisons"></div>
+    </section>
+
+    <section>
+      <h2>3 · Benchmark suite <span class="hint">sizes run one after another; outputs discarded after verification</span></h2>
+      <form id="bench-form">
+        <label class="inline"><input type="checkbox" name="size" value="5k" checked> 5k</label>
+        <label class="inline"><input type="checkbox" name="size" value="50k" checked> 50k</label>
+        <label class="inline"><input type="checkbox" name="size" value="500k" checked> 500k</label>
+        <label class="inline"><input type="checkbox" name="size" value="1m"> 1M</label>
+        <label class="inline"><input type="checkbox" name="size" value="5m"> 5M</label>
+        <label>Source <select name="source_format"><option>parquet</option><option>csv</option></select></label>
+        <button class="primary">Run benchmark</button>
+      </form>
+      <div id="benchmarks"></div>
+    </section>
+
+    <section id="preview-section" hidden>
+      <h2>Output preview <span class="hint" id="preview-title"></span></h2>
+      <pre id="preview"></pre>
+    </section>
+  </div>
+
+  <aside>
+    <section>
+      <h2>Event stream <span class="hint">/api/events</span></h2>
+      <div id="log"><p class="muted" id="log-empty">Waiting for events — generate a dataset or run a comparison.</p></div>
+    </section>
+  </aside>
+</main>
+
+<script>
+const STAGES = ["ingest", "clean", "validate", "transform", "aggregate"];
+const $ = (sel) => document.querySelector(sel);
+const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const fmtN = (n) => n == null ? "-" : Number(n).toLocaleString();
+const fmtS = (s) => s == null ? "-" : s < 10 ? s.toFixed(2) + "s" : s < 600 ? s.toFixed(1) + "s" : (s / 60).toFixed(1) + "m";
+const fmtMB = (mb) => mb == null ? "-" : mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb >= 1 ? mb.toFixed(0) + " MB" : (mb * 1024).toFixed(0) + " KB";
+const badge = (s) => `<span class="badge s-${esc(s)}">${esc(s)}</span>`;
+
+async function api(path, options = {}) {
+  const res = await fetch(path, options);
+  const body = res.headers.get("content-type")?.includes("json") ? await res.json() : await res.text();
+  if (!res.ok) throw new Error(body?.detail ? JSON.stringify(body.detail) : res.statusText);
+  return body;
+}
+const post = (path, payload) => api(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+
+$("#legend").innerHTML = STAGES.map((s) => `<span><i style="background:var(--${s})"></i>${s}</span>`).join("");
+
+function renderDatasets(datasets) {
+  const head = `<tr><th>Dataset</th><th>Origin</th><th>Status</th><th class="num">Trades</th><th class="num">Counterparties</th><th class="num">Parquet</th><th class="num">CSV</th><th class="num">Generated in</th></tr>`;
+  const rows = datasets.map((d) => `<tr>
+      <td><code>${esc(d.dataset_id)}</code>${d.error ? `<div class="err">${esc(d.error)}</div>` : ""}</td>
+      <td>${esc(d.origin)}</td><td>${badge(d.status)}</td>
+      <td class="num">${fmtN(d.row_counts.trades)}</td><td class="num">${fmtN(d.row_counts.counterparties)}</td>
+      <td class="num">${d.size_bytes.parquet ? fmtMB(d.size_bytes.parquet / 1048576) : "-"}</td>
+      <td class="num">${d.size_bytes.csv ? fmtMB(d.size_bytes.csv / 1048576) : "-"}</td>
+      <td class="num">${fmtS(d.generation_seconds)}</td></tr>`).join("");
+  $("#datasets").innerHTML = datasets.length ? head + rows : `<tr><td class="muted">No datasets yet — generate one above.</td></tr>`;
+  const select = $("#dataset-select"), current = select.value;
+  select.innerHTML = datasets.filter((d) => d.status === "ready")
+    .map((d) => `<option value="${esc(d.dataset_id)}">${esc(d.dataset_id)} (${fmtN(d.row_counts.trades)})</option>`).join("");
+  if ([...select.options].some((o) => o.value === current)) select.value = current;
+}
+
+function stageBar(run, scale) {
+  const spans = STAGES.map((stage) => {
+    const t = run.stages[stage];
+    if (!t) return "";
+    const width = scale ? (t.wall_seconds / scale) * 100 : 0;
+    return `<span title="${stage}: ${fmtS(t.wall_seconds)} · ${t.cpu_utilization} cores · ${fmtMB(t.peak_rss_mb)}" style="width:${width}%;background:var(--${stage})"></span>`;
+  }).join("");
+  return `<div class="bar">${spans}</div>`;
+}
+
+function renderComparison(report) {
+  const c = report.comparison;
+  const scale = Math.max(...report.runs.map((r) => r.total_seconds), 0.0001);
+  const slow = report.slowdown_vs_duckdb.jq;
+  const rows = report.runs.map((r) => `
+    <div class="engine-${r.engine}">${r.engine}</div>
+    ${stageBar(r, scale)}
+    <div class="metrics">${badge(r.status)} ${r.current_stage ? "· " + r.current_stage + " " : ""}
+      ${fmtS(r.total_seconds)} · ${fmtMB(r.peak_rss_mb)} · ${r.cpu_utilization} cores
+      ${r.error ? `<div class="err">${esc(r.error)}</div>` : ""}</div>`).join("");
+  const v = c.verification;
+  const verdict = v ? (report.equivalent
+      ? `<span class="s-succeeded">✔ outputs equivalent</span> <span class="muted">(${v.checks.map((k) => `${k.output}: ${fmtN(k.left_rows)} rows, ${fmtN(k.compared_docs)} compared`).join(" · ")}${v.sampled ? " · sampled" : ""})</span>`
+      : `<span class="s-failed">✘ outputs differ</span> <pre>${esc(JSON.stringify(v.checks.filter((k) => k.mismatched_docs || !k.keys_match), null, 1))}</pre>`)
+    : c.note ? `<span class="muted">${esc(c.note)}</span>` : "";
+  const links = report.runs.filter((r) => r.outputs.length).map((r) =>
+    `<span class="engine-${r.engine}">${r.engine}:</span> <a href="/tracker#run=${encodeURIComponent(r.run_id)}">track rows</a> ` + r.outputs.filter((o) => o !== "row_status").map((o) =>
+      `<a href="#" data-run="${r.run_id}" data-output="${o}">${o}</a><a href="/api/runs/${r.run_id}/outputs/${o}/download" title="download all rows">⤓</a>`).join(" ")).join(" &nbsp; ");
+  const quality = report.runs.find((r) => r.quality)?.quality;
+  return `<div class="card">
+    <div class="card-head">${badge(c.status)} <code>${esc(c.dataset_id)}</code> <span class="muted">${esc(c.source_format)}</span>
+      ${slow ? `<b>jq ${slow.total}× slower</b> <span class="muted">(${STAGES.filter((s) => slow[s] != null).map((s) => `${s} ${slow[s]}×`).join(", ")})</span>` : ""}
+      <span class="id">${esc(c.comparison_id)}</span></div>
+    <div class="bars">${rows}</div>
+    <div class="verdict">${verdict}</div>
+    ${quality ? `<div class="metrics">raw ${fmtN(quality.raw_rows)} → dupes −${fmtN(quality.duplicates_removed)} → valid ${fmtN(quality.valid_rows)} / rejected ${fmtN(quality.rejected_rows)} → output ${fmtN(quality.output_rows)} docs, ${fmtN(quality.exposure_groups)} exposure groups</div>` : ""}
+    <div class="links">${links}</div>
+  </div>`;
+}
+
+const specLabel = (s) => `${fmtN(s.rows)} rows` + (s.hierarchy_depth !== 7 ? ` · hierarchy depth ${s.hierarchy_depth}` : "")
+  + (s.max_chain_length !== 5 ? ` · chains up to ${s.max_chain_length}` : "");
+
+function renderBenchmark(report) {
+  const b = report.benchmark;
+  const max = Math.max(...report.rows.map((r) => r.total_seconds), 0.0001);
+  const rows = report.rows.map((r) => `<tr>
+      <td class="num">${fmtN(r.rows)}</td><td class="engine-${r.engine}">${r.engine}</td><td>${badge(r.status)}</td>
+      ${STAGES.map((s) => `<td class="num">${fmtS(r.stage_seconds[s])}</td>`).join("")}
+      <td class="num"><b>${fmtS(r.total_seconds)}</b></td>
+      <td style="min-width:120px"><div class="bar"><span style="width:${(r.total_seconds / max) * 100}%;background:var(--${r.engine === "duckdb" ? "duck" : "jq"})"></span></div></td>
+      <td class="num">${fmtMB(r.peak_rss_mb)}</td><td class="num">${r.cpu_utilization}</td>
+      <td class="num">${fmtN(r.rows_per_second)}</td>
+      <td class="num">${r.slowdown_vs_duckdb ? r.slowdown_vs_duckdb + "×" : "-"}</td>
+      <td>${r.equivalent == null ? "-" : r.equivalent ? "✔" : "✘"}</td></tr>
+      ${r.error ? `<tr><td></td><td colspan="14" class="err">${esc(r.error)}</td></tr>` : ""}`).join("");
+  return `<div class="card">
+    <div class="card-head">${badge(b.status)} <span>${b.specs.map(specLabel).join(" · ")} · ${esc(b.source_format)}</span>
+      <a href="/api/benchmarks/${b.benchmark_id}/report.md" target="_blank">markdown</a><span class="id">${esc(b.benchmark_id)}</span></div>
+    ${b.error ? `<div class="err">${esc(b.error)}</div>` : ""}
+    <div class="table-wrap"><table>
+      <tr><th class="num">Rows</th><th>Engine</th><th>Status</th>${STAGES.map((s) => `<th class="num">${s}</th>`).join("")}
+        <th class="num">Total</th><th></th><th class="num">Peak RSS</th><th class="num">Cores</th><th class="num">Rows/s</th><th class="num">× DuckDB</th><th>Equal</th></tr>
+      ${rows || `<tr><td colspan="15" class="muted">preparing datasets…</td></tr>`}
+    </table></div></div>`;
+}
+
+let refreshTimer = null;
+function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 250); }
+async function refresh() {
+  const [datasets, comparisons, benchmarks] = await Promise.all([api("/api/datasets"), api("/api/comparisons"), api("/api/benchmarks")]);
+  renderDatasets(datasets);
+  $("#comparisons").innerHTML = comparisons.filter((r) => !r.comparison.benchmark_id).slice(0, 15).map(renderComparison).join("")
+    || `<p class="muted">No comparisons yet.</p>`;
+  $("#benchmarks").innerHTML = benchmarks.slice(0, 5).map(renderBenchmark).join("") || `<p class="muted">No benchmarks yet.</p>`;
+}
+
+function logEvent(type, data) {
+  const ids = Object.entries(data).filter(([k]) => k.endsWith("_id")).map(([, v]) => v).join(" ");
+  let extra = "";
+  if (type === "StageCompleted") extra = ` ${data.metrics.stage} ${fmtS(data.metrics.wall_seconds)} ${fmtMB(data.metrics.peak_rss_mb)}`;
+  if (type === "StageStarted") extra = ` ${data.stage}`;
+  $("#log-empty")?.remove();
+  const line = document.createElement("div");
+  line.innerHTML = `<span class="muted">${new Date(data.occurred_at).toLocaleTimeString()}</span> <b>${esc(type)}</b>${esc(extra)} <span class="muted">${esc(ids)}</span>`;
+  $("#log").prepend(line);
+  while ($("#log").childElementCount > 300) $("#log").lastChild.remove();
+}
+
+function connect() {
+  const source = new EventSource("/api/events");
+  source.onopen = () => { $("#dot").classList.add("on"); $("#live-label").textContent = "live"; };
+  source.onerror = () => { $("#dot").classList.remove("on"); $("#live-label").textContent = "reconnecting…"; };
+  const types = ["DatasetGenerationRequested", "DatasetUploaded", "DatasetReady", "DatasetFailed", "RunStarted", "StageStarted",
+    "StageCompleted", "RunFinished", "OutputsDiscarded", "ComparisonRequested", "ComparisonStarted", "VerificationStarted",
+    "ComparisonCompleted", "BenchmarkRequested", "BenchmarkProgressed", "BenchmarkCompleted"];
+  for (const type of types) source.addEventListener(type, (e) => { logEvent(type, JSON.parse(e.data)); scheduleRefresh(); });
+}
+
+function withButton(form, handler) {
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = form.querySelector("button.primary");
+    button.disabled = true;
+    try { await handler(new FormData(form)); await refresh(); }
+    catch (err) { alert(err.message); }
+    finally { button.disabled = false; }
+  });
+}
+
+withButton($("#gen-form"), (f) => post("/api/datasets/generate", {
+  rows: +f.get("rows"), seed: +f.get("seed"), dirty_rate: +f.get("dirty_rate"),
+  hierarchy_depth: +f.get("hierarchy_depth"), max_chain_length: +f.get("max_chain_length"),
+}));
+$("#presets").addEventListener("click", async () => {
+  const f = new FormData($("#gen-form"));
+  await post("/api/datasets/presets", { seed: +f.get("seed"), dirty_rate: +f.get("dirty_rate") });
+  refresh();
+});
+withButton($("#upload-form"), (f) => {
+  for (const [key, value] of [...f.entries()]) if (value instanceof File && !value.name) f.delete(key);
+  return api("/api/datasets/upload", { method: "POST", body: f });
+});
+withButton($("#cmp-form"), (f) => post("/api/comparisons", {
+  dataset_id: f.get("dataset_id"),
+  source_format: f.get("source_format"),
+  engines: ["duckdb", "jq"].filter((e) => f.get(e)),
+  verify: !!f.get("verify"),
+  parallel_engines: !!f.get("parallel_engines"),
+  params: {
+    trade_date_from: f.get("trade_date_from") || null,
+    trade_date_to: f.get("trade_date_to") || null,
+    instrument_types: f.get("instrument_types") ? f.get("instrument_types").split(",").map((s) => s.trim()).filter(Boolean) : null,
+    min_notional_usd: f.get("min_notional_usd") ? +f.get("min_notional_usd") : null,
+    latest_only: !!f.get("latest_only"),
+  },
+}));
+withButton($("#bench-form"), (f) => post("/api/benchmarks", { sizes: f.getAll("size"), source_format: f.get("source_format") }));
+
+document.addEventListener("click", async (event) => {
+  const link = event.target.closest("a[data-run]");
+  if (!link) return;
+  event.preventDefault();
+  const { run, output } = link.dataset;
+  const data = await api(`/api/runs/${run}/outputs/${output}?limit=3`);
+  $("#preview-title").textContent = `${run} · ${output} (first documents)`;
+  $("#preview").textContent = JSON.stringify(data, null, 2);
+  $("#preview-section").hidden = false;
+  $("#preview-section").scrollIntoView({ behavior: "smooth" });
+});
+
+connect();
+refresh();
+</script>
+</body>
+</html>

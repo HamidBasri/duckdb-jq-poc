@@ -1,0 +1,37 @@
+[project]
+name = "duckdb-jq-poc"
+version = "0.1.0"
+description = "Event-driven FastAPI POC benchmarking DuckDB vs jq for tabular-to-JSON trade transformations"
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb==1.5.6",
+    "fastapi>=0.159",
+    "uvicorn[standard]>=0.54",
+    "pydantic>=2.14",
+    "pydantic-settings>=2.16",
+    "python-multipart>=0.0.32",
+    "numpy>=2.5",
+    "pyarrow>=26.0",
+    "psutil>=7.2",
+    "orjson>=3.13",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.1", "httpx>=0.28", "ruff>=0.14", "mypy>=1.18"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/test_edge_cases.py" = ["E501"]  # inline CSV fixtures

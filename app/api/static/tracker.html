@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trade Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: app shell. Navy top bar; run card and funnel on top; list and detail side by side below. */
+:root {
+  --page: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #f2f4f7;
+  --hover: #eef3fa;
+  --selected: #e3ecf8;
+  --ink: #0f1b2b;
+  --ink-2: #3c4959;
+  --ink-3: #66727f;
+  --line: #e0e5eb;
+  --line-strong: #b9c3ce;
+  --brand: #13294a;
+  --on-brand: #ffffff;
+  --on-brand-2: #b6c3d6;
+  --accent: #2a78d6;
+  --good: #17784a;
+  --good-soft: #e6f4ec;
+  --warn: #a35f00;
+  --warn-soft: #fbf1e0;
+  --bad: #b8392b;
+  --bad-soft: #fbeae8;
+  --muted-soft: #eef0f3;
+  --duck: #2a78d6;
+  --jq: #eb6834;
+  --font-body: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0a0f17; --surface: #101823; --surface-2: #172130; --hover: #182436; --selected: #1c2c44;
+    --ink: #e7ecf2; --ink-2: #b3becb; --ink-3: #8693a3; --line: #222e3d; --line-strong: #3a4a5f;
+    --brand: #0f1f35; --on-brand: #ffffff; --on-brand-2: #9fb0c8; --accent: #3987e5;
+    --good: #4cc38a; --good-soft: #12291f; --warn: #e0a040; --warn-soft: #2d2213; --bad: #e5675a; --bad-soft: #2e1916;
+    --muted-soft: #1b2533; --duck: #3987e5; --jq: #d95926;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0a0f17; --surface: #101823; --surface-2: #172130; --hover: #182436; --selected: #1c2c44;
+  --ink: #e7ecf2; --ink-2: #b3becb; --ink-3: #8693a3; --line: #222e3d; --line-strong: #3a4a5f;
+  --brand: #0f1f35; --on-brand: #ffffff; --on-brand-2: #9fb0c8; --accent: #3987e5;
+  --good: #4cc38a; --good-soft: #12291f; --warn: #e0a040; --warn-soft: #2d2213; --bad: #e5675a; --bad-soft: #2e1916;
+  --muted-soft: #1b2533; --duck: #3987e5; --jq: #d95926;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14.5px/1.5 var(--font-body); }
+button, input, select { font: inherit; color: inherit; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.gutter { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+.eyebrow { font: 600 0.7rem/1.2 var(--font-body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.muted { color: var(--ink-3); }
+
+/* top bar */
+.topbar { background: var(--brand); color: var(--on-brand); padding-block: 12px; position: sticky; top: 0; z-index: 5; padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
+.topbar-inner { max-width: 1480px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+.brand h1 { margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: -0.01em; }
+.brand span { color: var(--on-brand-2); font-size: 0.85rem; }
+.topbar label { display: flex; align-items: center; gap: 8px; color: var(--on-brand-2); font-size: 0.82rem; }
+.topbar select { background: rgb(255 255 255 / 0.08); border: 1px solid rgb(255 255 255 / 0.22); color: var(--on-brand); border-radius: 4px; padding: 6px 8px; max-width: min(520px, 70vw); }
+.topbar select option { color: #0f1b2b; background: #ffffff; }
+.topbar a { color: var(--on-brand-2); font-size: 0.85rem; text-decoration: none; }
+.topbar a:hover { color: var(--on-brand); }
+.live { display: flex; align-items: center; gap: 6px; color: var(--on-brand-2); font-size: 0.8rem; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--on-brand-2); }
+.dot.on { background: #4cc38a; box-shadow: 0 0 0 3px rgb(76 195 138 / 0.25); }
+
+.app { max-width: 1480px; margin: 0 auto; padding-block: 20px 48px; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+
+/* run card */
+.run { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.run-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.run-head h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 26px; font-size: 0.85rem; }
+.facts div { display: flex; flex-direction: column; }
+.facts dt { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.stage { border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; background: var(--surface); }
+.stage b { font-size: 0.82rem; font-weight: 600; }
+.stage span { font-size: 0.78rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.stage.done { border-color: var(--line-strong); background: var(--surface-2); }
+.stage.running { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+.stage.running span { color: var(--accent); }
+@media (max-width: 700px) { .stages { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 7px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; white-space: nowrap; background: var(--muted-soft); color: var(--ink-2); }
+.pill i { font-style: normal; display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; font-size: 0.6rem; color: var(--surface); background: var(--ink-3); }
+.pill.delivered, .pill.succeeded { background: var(--good-soft); color: var(--good); } .pill.delivered i, .pill.succeeded i { background: var(--good); }
+.pill.rejected, .pill.failed { background: var(--bad-soft); color: var(--bad); } .pill.rejected i, .pill.failed i { background: var(--bad); }
+.pill.filtered_out, .pill.running, .pill.queued { background: var(--warn-soft); color: var(--warn); } .pill.filtered_out i, .pill.running i, .pill.queued i { background: var(--warn); }
+.engine { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.85rem; }
+.engine::before { content: ""; width: 9px; height: 9px; border-radius: 2px; background: var(--c); }
+.engine.duckdb { --c: var(--duck); } .engine.jq { --c: var(--jq); }
+
+/* funnel */
+.funnel { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.step { appearance: none; border: 0; border-left: 1px solid var(--line); background: transparent; text-align: left; padding: 14px 16px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.step:first-child { border-left: 0; }
+.step:hover { background: var(--hover); }
+.step[aria-pressed="true"] { background: var(--selected); box-shadow: inset 0 -3px 0 var(--brand); }
+.step .label { font-size: 0.75rem; color: var(--ink-3); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+.step .swatch { width: 8px; height: 8px; border-radius: 2px; }
+.step .num { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.step .sub { font-size: 0.78rem; color: var(--ink-3); }
+.step .bar { height: 4px; border-radius: 2px; background: var(--muted-soft); overflow: hidden; margin-top: 4px; }
+.step .bar span { display: block; height: 100%; background: var(--c, var(--ink-3)); }
+@media (max-width: 800px) { .funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .step { border-top: 1px solid var(--line); } }
+
+/* workspace */
+.workspace { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .workspace { grid-template-columns: minmax(0, 1fr); } }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.search { flex: 1 1 220px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 6px 10px; background: var(--surface); }
+.search input { border: 0; outline: none; background: transparent; width: 100%; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { appearance: none; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 10px; font-size: 0.8rem; cursor: pointer; color: var(--ink-2); }
+.chip b { font-variant-numeric: tabular-nums; font-weight: 600; margin-left: 4px; color: var(--ink-3); }
+.chip[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.chip[aria-pressed="true"] b { color: var(--on-brand-2); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; background: var(--surface-2); position: sticky; top: 0; }
+td.num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-3); }
+td.id { font-family: var(--font-mono); font-size: 0.84rem; }
+td.reasons { white-space: normal; color: var(--ink-2); font-size: 0.8rem; min-width: 200px; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--hover); }
+tbody tr[aria-selected="true"] { background: var(--selected); box-shadow: inset 3px 0 0 var(--brand); }
+.pager { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font-size: 0.82rem; color: var(--ink-3); }
+.pager button, .btn { appearance: none; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
+.pager button:disabled { opacity: 0.45; cursor: default; }
+.empty { padding: 48px 24px; text-align: center; color: var(--ink-3); display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.empty b { color: var(--ink); font-size: 1rem; }
+
+/* detail */
+.detail { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow-y: auto; }
+@media (max-width: 1100px) { .detail { position: static; max-height: none; } }
+.detail-head { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.detail-head h3 { margin: 0; font-size: 1.15rem; font-family: var(--font-mono); font-weight: 500; }
+.detail-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 0.84rem; color: var(--ink-3); }
+.block { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.block:last-child { border-bottom: 0; }
+.block h4 { margin: 0; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.timeline li { display: grid; grid-template-columns: 22px 1fr auto; gap: 0 12px; position: relative; padding-bottom: 14px; }
+.timeline li:last-child { padding-bottom: 0; }
+.timeline li::before { content: ""; position: absolute; left: 10px; top: 22px; bottom: 0; width: 2px; background: var(--line); }
+.timeline li:last-child::before { display: none; }
+.node { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 0.68rem; font-weight: 700; z-index: 1; }
+.node.done { background: var(--brand); color: var(--on-brand); }
+.node.stopped { background: var(--bad); color: #ffffff; }
+.node.skipped { background: var(--surface); border: 2px solid var(--line-strong); color: var(--ink-3); }
+.timeline .what b { font-weight: 600; font-size: 0.9rem; }
+.timeline .what p { margin: 2px 0 0; color: var(--ink-2); font-size: 0.84rem; }
+.timeline li.skipped .what { color: var(--ink-3); }
+.timeline li.skipped .what b { color: var(--ink-3); font-weight: 500; }
+.timeline .when { text-align: right; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-3); white-space: nowrap; }
+
+.reason { display: flex; gap: 8px; align-items: flex-start; font-size: 0.86rem; }
+.reason i { font-style: normal; flex: none; margin-top: 2px; width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 0.6rem; color: #ffffff; background: var(--c); }
+.reason.error { --c: var(--bad); }
+.reason.warning { --c: var(--warn); }
+.reason code { color: var(--ink-3); font-size: 0.74rem; }
+
+.diff td, .diff th { white-space: normal; vertical-align: top; padding: 6px 8px; font-size: 0.82rem; position: static; }
+.diff td:first-child { color: var(--ink-3); width: 28%; }
+.diff td.v { font-family: var(--font-mono); font-size: 0.8rem; word-break: break-word; }
+.diff tr.changed td.v.after { background: var(--good-soft); color: var(--ink); }
+.diff tr.changed td.v.before { background: var(--bad-soft); text-decoration: line-through; text-decoration-color: var(--bad); }
+.diff .null { color: var(--ink-3); font-style: italic; }
+details.json summary { cursor: pointer; font-size: 0.84rem; color: var(--ink-2); }
+pre { margin: 8px 0 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 12px; overflow: auto; max-height: 420px; font: 0.78rem/1.55 var(--font-mono); }
+.note { font-size: 0.84rem; color: var(--ink-3); }
+.skeleton { color: var(--ink-3); padding: 24px 18px; }
+</style>
+</head>
+<body>
+<header class="topbar gutter">
+  <div class="topbar-inner">
+    <div class="brand"><h1>Trade tracker</h1><span>Follow every input row through a pipeline run</span></div>
+    <label for="run-select">Run <select id="run-select" aria-label="Pipeline run"></select></label>
+    <span class="live"><span class="dot" id="live-dot"></span><span id="live-label">connecting</span></span>
+    <a href="/">Dashboard</a>
+  </div>
+</header>
+
+<main class="app gutter">
+  <section class="card run" id="run-card" aria-live="polite">
+    <div class="skeleton">Loading runs…</div>
+  </section>
+
+  <section class="card funnel" id="funnel" aria-label="Where the rows ended up"></section>
+
+  <section class="workspace">
+    <div class="card">
+      <div class="toolbar">
+        <label class="search" for="search">
+          <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="11" y1="11" x2="15" y2="15" stroke="currentColor" stroke-width="1.6"/></svg>
+          <input id="search" type="search" placeholder="Search trade id or row number" autocomplete="off">
+        </label>
+        <div class="chips" id="chips" role="group" aria-label="Filter by state"></div>
+      </div>
+      <div class="table-wrap" id="table-wrap"></div>
+      <div class="pager" id="pager"></div>
+    </div>
+
+    <aside class="card detail" id="detail" aria-live="polite">
+      <div class="empty"><b>Select a row</b><span>Its journey through the pipeline appears here: when it was queued, what each stage did to it, and the record before and after.</span></div>
+    </aside>
+  </section>
+</main>
+
+<script>
+const PAGE = 50;
+const STAGES = ["ingest", "clean", "validate", "transform", "aggregate"];
+const STATES = {
+  delivered: { label: "Delivered", icon: "✓" },
+  rejected: { label: "Rejected", icon: "✕" },
+  duplicate: { label: "Duplicate", icon: "=" },
+  filtered_out: { label: "Filtered out", icon: "–" },
+};
+const CODES = {
+  E_TRADE_ID_MISSING: "Trade id is missing",
+  E_EVENT_TYPE_INVALID: "Event type is missing or unknown",
+  E_EVENT_LINEAGE_MISMATCH: "Event type does not match its link to a previous trade",
+  E_TRADE_DATE_INVALID: "Trade date is missing or not a real date",
+  E_SETTLEMENT_BEFORE_TRADE: "Settles before it was traded",
+  E_SIDE_INVALID: "Buy/sell side is missing or invalid",
+  E_QUANTITY_INVALID: "Quantity is missing, zero or not a number",
+  E_PRICE_INVALID: "Price is missing, negative or not a number",
+  E_CURRENCY_UNKNOWN: "Currency is unknown",
+  E_INSTRUMENT_UNRESOLVED: "Instrument does not exist",
+  E_COUNTERPARTY_UNRESOLVED: "Counterparty does not exist",
+  E_BOOK_UNRESOLVED: "Book does not exist",
+  E_PREVIOUS_TRADE_UNRESOLVED: "The previous trade it amends does not exist",
+  W_CURRENCY_IMPUTED: "Currency was missing; taken from the instrument",
+  W_SETTLEMENT_IMPUTED: "Settlement date was missing or invalid; set to trade date + 2 days",
+  W_COUNTERPARTY_HIERARCHY_CYCLE: "Counterparty parent chain loops back on itself",
+  W_COUNTERPARTY_PARENT_UNRESOLVED: "Counterparty parent does not exist",
+  W_LINEAGE_CYCLE: "Version chain loops back on itself",
+};
+// source column -> path in the output document (trades) or the reject record
+const FIELDS = [
+  ["trade_id", ["trade_id"], ["trade_id"]],
+  ["previous_trade_id", ["lineage", "previous_trade_id"], ["record", "previous_trade_id"]],
+  ["event_type", ["event_type"], ["record", "event_type"]],
+  ["trade_date", ["trade_date"], ["record", "trade_date"]],
+  ["settlement_date", ["settlement_date"], ["record", "settlement_date"]],
+  ["side", ["side"], ["record", "side"]],
+  ["quantity", ["economics", "quantity"], ["record", "quantity"]],
+  ["price", ["economics", "price"], ["record", "price"]],
+  ["currency", ["economics", "currency"], ["record", "currency"]],
+  ["instrument_id", ["instrument", "instrument_id"], ["record", "instrument_id"]],
+  ["counterparty_id", ["counterparty", "counterparty_id"], ["record", "counterparty_id"]],
+  ["book_id", ["book", "book_id"], ["record", "book_id"]],
+];
+
+const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const fmtN = (n) => n == null ? "–" : Number(n).toLocaleString("en-US");
+const fmtS = (s) => s == null ? "–" : s < 1 ? `${Math.round(s * 1000)} ms` : s < 60 ? `${s.toFixed(2)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
+const fmtTime = (iso) => iso ? new Date(iso).toLocaleTimeString("en-GB", { hour12: false }) + "." + String(new Date(iso).getMilliseconds()).padStart(3, "0") : "–";
+const fmtDate = (iso) => iso ? new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "medium" }) : "–";
+const pill = (state, label) => `<span class="pill ${esc(state)}"><i aria-hidden="true">${esc(STATES[state]?.icon ?? "•")}</i>${esc(label ?? STATES[state]?.label ?? state)}</span>`;
+const pick = (obj, path) => path.reduce((o, k) => (o == null ? undefined : o[k]), obj);
+
+async function api(path) {
+  const res = await fetch(path);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || res.statusText);
+  return body;
+}
+
+const view = { runs: [], runId: null, state: null, q: "", offset: 0, row: null };
+
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  return { run: h.get("run"), row: h.get("row") ? Number(h.get("row")) : null };
+}
+function writeHash() {
+  const h = new URLSearchParams();
+  if (view.runId) h.set("run", view.runId);
+  if (view.row) h.set("row", view.row);
+  history.replaceState(null, "", `#${h}`);
+}
+const currentRun = () => view.runs.find((r) => r.run_id === view.runId);
+
+/* ---------- runs ---------- */
+async function loadRuns(keepSelection = true) {
+  view.runs = await api("/api/runs");
+  const select = $("#run-select");
+  select.innerHTML = view.runs.length
+    ? view.runs.map((r) => `<option value="${esc(r.run_id)}">${esc(r.engine)} · ${esc(r.dataset_id)} · ${esc(fmtDate(r.created_at))}${r.status !== "succeeded" ? " · " + esc(r.status) : ""}</option>`).join("")
+    : `<option value="">No runs yet</option>`;
+  const wanted = keepSelection && view.runs.some((r) => r.run_id === view.runId) ? view.runId : view.runs.find((r) => r.tracking)?.run_id ?? view.runs[0]?.run_id ?? null;
+  if (wanted) select.value = wanted;
+  return wanted;
+}
+
+function renderRun() {
+  const r = currentRun();
+  if (!r) {
+    $("#run-card").innerHTML = `<div class="empty"><b>No pipeline runs yet</b><span>Start a comparison from the <a href="/">dashboard</a>. Its runs appear here and update live.</span></div>`;
+    $("#funnel").innerHTML = "";
+    return;
+  }
+  const done = new Map(r.stages.map((s) => [s.stage, s]));
+  const stages = STAGES.map((s) => {
+    const m = done.get(s);
+    const cls = m ? "done" : r.current_stage === s ? "running" : "";
+    const sub = m ? `${fmtS(m.wall_seconds)} · ${fmtN(m.rows_out)} rows` : r.current_stage === s ? "running…" : r.status === "failed" ? "not run" : "waiting";
+    return `<div class="stage ${cls}"><b>${s[0].toUpperCase() + s.slice(1)}</b><span>${sub}</span></div>`;
+  }).join("");
+  const total = r.stages.reduce((a, s) => a + s.wall_seconds, 0);
+  $("#run-card").innerHTML = `
+    <div class="run-head">
+      <span class="engine ${esc(r.engine)}">${esc(r.engine)}</span>
+      <h2>${esc(r.dataset_id)}</h2>
+      ${pill(r.status, r.status)}
+      <span class="muted mono">${esc(r.run_id)}</span>
+    </div>
+    <dl class="facts">
+      <div><dt>Queued</dt><dd>${fmtDate(r.created_at)}</dd></div>
+      <div><dt>Started</dt><dd>${fmtDate(r.started_at)}</dd></div>
+      <div><dt>Finished</dt><dd>${fmtDate(r.finished_at)}</dd></div>
+      <div><dt>Pipeline time</dt><dd>${fmtS(total)}</dd></div>
+      <div><dt>Source</dt><dd>${esc(r.source_format)}</dd></div>
+      <div><dt>Row tracking</dt><dd>${r.tracking ? (r.tracking.error ? "failed" : `${fmtN(r.tracking.rows)} rows in ${fmtS(r.tracking.seconds)}`) : r.status === "succeeded" ? "not recorded" : "after the run"}</dd></div>
+    </dl>
+    <div class="stages">${stages}</div>
+    ${r.error ? `<div class="note" style="color:var(--bad)">${esc(r.error)}</div>` : ""}`;
+  renderFunnel(r);
+}
+
+function renderFunnel(r) {
+  const t = r.tracking;
+  if (!t || t.error) {
+    $("#funnel").innerHTML = `<div class="empty" style="grid-column: 1 / -1"><b>${r.status === "succeeded" ? "This run has no row tracking" : "Rows appear when the run finishes"}</b><span>${r.status === "running" || r.status === "queued" ? "The stages above update live." : t?.error ? esc(t.error) : "Runs made before row tracking was added, or with tracking turned off, have no row table."}</span></div>`;
+    return;
+  }
+  const s = t.states, total = t.rows;
+  const steps = [
+    [null, "Received", total, "every row in the source file", "var(--ink-3)"],
+    ["duplicate", "Duplicates", s.duplicate, "exact copies removed in clean", "var(--ink-3)"],
+    ["rejected", "Rejected", s.rejected, "broke a rule in validate", "var(--bad)"],
+    ["filtered_out", "Filtered out", s.filtered_out, "valid, not requested", "var(--warn)"],
+    ["delivered", "Delivered", s.delivered, `${fmtN(t.in_exposure)} counted in exposure`, "var(--good)"],
+  ];
+  $("#funnel").innerHTML = steps.map(([state, label, n, sub, color]) => `
+    <button class="step" type="button" data-state="${state ?? ""}" aria-pressed="${view.state === state}">
+      <span class="label"><span class="swatch" style="background:${color}" aria-hidden="true"></span>${label}</span>
+      <span class="num">${fmtN(n)}</span>
+      <span class="sub">${sub}</span>
+      <span class="bar" aria-hidden="true"><span style="width:${total ? (n / total) * 100 : 0}%;--c:${color}"></span></span>
+    </button>`).join("");
+  renderChips(r);
+}
+
+function renderChips(r) {
+  const s = r.tracking?.states ?? {};
+  const options = [[null, "All", r.tracking?.rows], ...Object.entries(STATES).map(([k, v]) => [k, v.label, s[k]])];
+  $("#chips").innerHTML = options.map(([k, label, n]) => `<button type="button" class="chip" data-state="${k ?? ""}" aria-pressed="${view.state === k}">${label}<b>${fmtN(n)}</b></button>`).join("");
+}
+
+/* ---------- rows ---------- */
+let rowsRequest = 0;
+async function loadRows() {
+  const r = currentRun();
+  if (!r?.tracking || r.tracking.error) {
+    $("#table-wrap").innerHTML = "";
+    $("#pager").innerHTML = "";
+    return;
+  }
+  const id = ++rowsRequest;
+  const params = new URLSearchParams({ limit: PAGE, offset: view.offset });
+  if (view.state) params.set("state", view.state);
+  if (view.q) params.set("q", view.q);
+  let page;
+  try { page = await api(`/api/runs/${encodeURIComponent(r.run_id)}/rows?${params}`); }
+  catch (err) { $("#table-wrap").innerHTML = `<div class="empty"><b>Could not load rows</b><span>${esc(err.message)}</span></div>`; return; }
+  if (id !== rowsRequest) return;
+  if (!page.rows.length) {
+    $("#table-wrap").innerHTML = `<div class="empty"><b>No rows match</b><span>Try another trade id, a row number, or clear the state filter.</span></div>`;
+    $("#pager").innerHTML = "";
+    return;
+  }
+  $("#table-wrap").innerHTML = `<table>
+    <thead><tr><th>Row</th><th>Trade id</th><th>State</th><th>Stopped at</th><th>Reasons and warnings</th><th>Exposure group</th></tr></thead>
+    <tbody>${page.rows.map((row) => {
+      const reasons = [...row.errors, ...row.warnings];
+      const text = row.state === "duplicate" ? `Copy of row ${fmtN(row.duplicate_of_row)}` : reasons.map((c) => CODES[c] ?? c).join("; ");
+      return `<tr tabindex="0" data-row="${row.source_row}" aria-selected="${row.source_row === view.row}">
+        <td class="num">${fmtN(row.source_row)}</td>
+        <td class="id">${esc(row.trade_id ?? "—")}</td>
+        <td>${pill(row.state)}</td>
+        <td>${row.stopped_at ? esc(row.stopped_at) : '<span class="muted">—</span>'}</td>
+        <td class="reasons">${text ? esc(text) : '<span class="muted">—</span>'}</td>
+        <td class="id">${row.exposure_group ? esc(row.exposure_group) : row.state === "delivered" ? '<span class="muted" title="Replaced by a later version, or a cancellation">not counted</span>' : '<span class="muted">—</span>'}</td></tr>`;
+    }).join("")}</tbody></table>`;
+  const end = Math.min(view.offset + PAGE, page.total);
+  $("#pager").innerHTML = `<span>${fmtN(view.offset + 1)}–${fmtN(end)} of ${fmtN(page.total)} rows</span>
+    <span style="display:flex;gap:8px"><button type="button" data-page="-1" ${view.offset === 0 ? "disabled" : ""}>Previous</button><button type="button" data-page="1" ${end >= page.total ? "disabled" : ""}>Next</button></span>`;
+}
+
+/* ---------- detail ---------- */
+async function loadDetail(sourceRow) {
+  view.row = sourceRow;
+  writeHash();
+  document.querySelectorAll("tbody tr").forEach((tr) => tr.setAttribute("aria-selected", String(Number(tr.dataset.row) === sourceRow)));
+  if (!sourceRow) return;
+  $("#detail").innerHTML = `<div class="skeleton">Loading row ${fmtN(sourceRow)}…</div>`;
+  let d;
+  try { d = await api(`/api/runs/${encodeURIComponent(view.runId)}/rows/${sourceRow}`); }
+  catch (err) { $("#detail").innerHTML = `<div class="empty"><b>Row not available</b><span>${esc(err.message)}</span></div>`; return; }
+  const row = d.row;
+  const timeline = d.timeline.map((step) => `
+    <li class="${step.status}">
+      <span class="node ${step.status}" aria-hidden="true">${step.status === "done" ? "✓" : step.status === "stopped" ? "✕" : ""}</span>
+      <span class="what"><b>${esc(step.title)}</b><p>${esc(step.detail)}</p></span>
+      <span class="when">${step.at ? fmtTime(step.at) : ""}${step.seconds != null ? `<br>${fmtS(step.seconds)}` : ""}</span>
+    </li>`).join("");
+  const reasons = [...row.errors.map((c) => ["error", c]), ...row.warnings.map((c) => ["warning", c])];
+  const after = d.output ?? d.reject;
+  const afterLabel = d.output ? "After (output document)" : d.reject ? "After (cleaned, then rejected)" : "After";
+  const fmtV = (v) => v == null ? '<span class="null">empty</span>' : esc(typeof v === "object" ? JSON.stringify(v) : v);
+  const diffRows = d.source ? FIELDS.map(([col, outPath, rejectPath]) => {
+    const before = d.source[col];
+    const value = d.output ? pick(d.output, outPath) : d.reject ? pick(d.reject, rejectPath) : undefined;
+    const changed = after && String(before ?? "") !== String(value ?? "");
+    return `<tr class="${changed ? "changed" : ""}"><td>${col}</td><td class="v before">${fmtV(before)}</td><td class="v after">${after ? fmtV(value) : '<span class="null">not produced</span>'}</td></tr>`;
+  }).join("") : "";
+  $("#detail").innerHTML = `
+    <div class="detail-head">
+      <span class="eyebrow">Row ${fmtN(row.source_row)} of the source file</span>
+      <h3>${esc(row.trade_id ?? "no trade id")}</h3>
+      <div class="detail-meta">${pill(row.state)}
+        ${row.version ? `<span>Version ${row.version}${row.is_latest ? " (latest)" : ""}</span>` : ""}
+        ${row.event_type ? `<span>${esc(row.event_type)}</span>` : ""}
+        ${row.exposure_group ? `<span>Exposure group <code>${esc(row.exposure_group)}</code></span>` : ""}
+      </div>
+    </div>
+    <div class="block"><h4>Journey</h4><ol class="timeline">${timeline}</ol></div>
+    ${reasons.length ? `<div class="block"><h4>Reasons and warnings</h4>${reasons.map(([kind, code]) => `<div class="reason ${kind}"><i aria-hidden="true">${kind === "error" ? "✕" : "!"}</i><span>${esc(CODES[code] ?? code)} <code>${esc(code)}</code></span></div>`).join("")}</div>` : ""}
+    ${d.source ? `<div class="block"><h4>Before and after</h4>
+      <div class="table-wrap"><table class="diff"><thead><tr><th>Field</th><th>Before (source)</th><th>${esc(afterLabel)}</th></tr></thead><tbody>${diffRows}</tbody></table></div>
+      <span class="note">Changed values are highlighted.${d.output_note ? " " + esc(d.output_note) : ""}</span></div>` : ""}
+    ${after ? `<div class="block"><details class="json"><summary>Full ${d.output ? "output document" : "reject record"} (JSON)</summary><pre>${esc(JSON.stringify(after, null, 2))}</pre></details></div>` : ""}`;
+}
+
+/* ---------- selection ---------- */
+async function selectRun(runId, row = null) {
+  view.runId = runId;
+  view.state = null;
+  view.q = "";
+  view.offset = 0;
+  $("#search").value = "";
+  renderRun();
+  await loadRows();
+  if (row) await loadDetail(row);
+  else {
+    view.row = null;
+    writeHash();
+    $("#detail").innerHTML = `<div class="empty"><b>Select a row</b><span>Its journey through the pipeline appears here: when it was queued, what each stage did to it, and the record before and after.</span></div>`;
+  }
+}
+
+function setState(state) {
+  view.state = state || null;
+  view.offset = 0;
+  renderFunnel(currentRun());
+  loadRows();
+}
+
+$("#run-select").addEventListener("change", (e) => selectRun(e.target.value));
+document.addEventListener("click", (e) => {
+  const step = e.target.closest(".step, .chip");
+  if (step) return setState(step.dataset.state);
+  const pager = e.target.closest("[data-page]");
+  if (pager) { view.offset = Math.max(0, view.offset + Number(pager.dataset.page) * PAGE); return loadRows(); }
+  const tr = e.target.closest("tbody tr[data-row]");
+  if (tr) loadDetail(Number(tr.dataset.row));
+});
+document.addEventListener("keydown", (e) => {
+  const tr = e.target.closest?.("tbody tr[data-row]");
+  if (!tr) return;
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); loadDetail(Number(tr.dataset.row)); }
+  if (e.key === "ArrowDown") { e.preventDefault(); tr.nextElementSibling?.focus(); }
+  if (e.key === "ArrowUp") { e.preventDefault(); tr.previousElementSibling?.focus(); }
+});
+let searchTimer;
+$("#search").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { view.q = e.target.value.trim(); view.offset = 0; loadRows(); }, 250);
+});
+
+/* ---------- live updates ---------- */
+let refreshTimer;
+function refreshSoon(rowsToo) {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(async () => {
+    const hadTracking = !!currentRun()?.tracking;
+    await loadRuns(true);
+    renderRun();
+    if (rowsToo || (!hadTracking && currentRun()?.tracking)) loadRows();
+  }, 300);
+}
+function connect() {
+  const source = new EventSource("/api/events");
+  source.onopen = () => { $("#live-dot").classList.add("on"); $("#live-label").textContent = "live"; };
+  source.onerror = () => { $("#live-dot").classList.remove("on"); $("#live-label").textContent = "reconnecting"; };
+  for (const type of ["RunStarted", "StageStarted", "StageCompleted", "RunFinished", "OutputsDiscarded", "ComparisonRequested"]) {
+    source.addEventListener(type, (e) => {
+      const data = JSON.parse(e.data);
+      refreshSoon(type === "RunFinished" && data.run_id === view.runId);
+    });
+  }
+}
+
+(async () => {
+  const hash = readHash();
+  view.runId = hash.run;
+  const runId = await loadRuns(true);
+  await selectRun(runId, hash.run === runId ? hash.row : null);
+  connect();
+})();
+</script>
+</body>
+</html>

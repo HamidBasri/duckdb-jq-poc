@@ -1,0 +1,1586 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DuckDB vs jq Benchmarks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: corporate report. Navy cover band, sticky contents rail on wide screens, one reading column.
+   Neutrals lean cool; the two engine colours are the only colours that carry data meaning. */
+:root {
+  --page: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #f2f4f7;
+  --ink: #0f1b2b;
+  --ink-2: #3c4959;
+  --ink-3: #66727f;
+  --line: #e0e5eb;
+  --line-strong: #b9c3ce;
+  --grid: #e9edf2;
+  --brand: #13294a;
+  --brand-rule: #13294a;
+  --on-brand: #ffffff;
+  --on-brand-2: #b6c3d6;
+  --duck: #2a78d6;
+  --duck-soft: #e8f1fb;
+  --jq: #eb6834;
+  --jq-soft: #fdeee7;
+  --neutral-mark: #7d8794;
+  --accent-soft: #edf1f6;
+  --bad: #b8392b;
+  --good: #17784a;
+  --warn: #a35f00;
+  --font-head: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0a0f17;
+    --surface: #101823;
+    --surface-2: #172130;
+    --ink: #e7ecf2;
+    --ink-2: #b3becb;
+    --ink-3: #8693a3;
+    --line: #222e3d;
+    --line-strong: #3a4a5f;
+    --grid: #1b2633;
+    --brand: #0f1f35;
+    --brand-rule: #6f8db8;
+    --on-brand: #ffffff;
+    --on-brand-2: #9fb0c8;
+    --duck: #3987e5;
+    --duck-soft: #14253b;
+    --jq: #d95926;
+    --jq-soft: #33201a;
+    --neutral-mark: #8b96a5;
+    --accent-soft: #1a2533;
+    --bad: #e5675a;
+    --good: #4cc38a;
+    --warn: #e0a040;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0a0f17;
+  --surface: #101823;
+  --surface-2: #172130;
+  --ink: #e7ecf2;
+  --ink-2: #b3becb;
+  --ink-3: #8693a3;
+  --line: #222e3d;
+  --line-strong: #3a4a5f;
+  --grid: #1b2633;
+  --brand: #0f1f35;
+  --brand-rule: #6f8db8;
+  --on-brand: #ffffff;
+  --on-brand-2: #9fb0c8;
+  --duck: #3987e5;
+  --duck-soft: #14253b;
+  --jq: #d95926;
+  --jq-soft: #33201a;
+  --neutral-mark: #8b96a5;
+  --accent-soft: #1a2533;
+  --bad: #e5675a;
+  --good: #4cc38a;
+  --warn: #e0a040;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15.5px/1.62 var(--font-body); }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3, h4 { font-family: var(--font-head); text-wrap: balance; margin: 0; line-height: 1.25; color: var(--ink); }
+h1 { font-size: clamp(2rem, 4.6vw, 2.75rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 1.12rem; font-weight: 600; }
+h4 { font-size: 0.95rem; font-weight: 600; }
+p { margin: 0; }
+a { color: inherit; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+a:hover { text-decoration-color: currentColor; }
+:focus-visible { outline: 2px solid var(--duck); outline-offset: 2px; border-radius: 2px; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+.prose { max-width: 70ch; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.eyebrow { font: 600 0.72rem/1.2 var(--font-body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.lede { font-size: 1.1rem; max-width: 64ch; }
+.muted { color: var(--ink-3); }
+
+/* cover */
+.cover { background: var(--brand); color: var(--on-brand); border-bottom: 1px solid var(--line); }
+.cover-inner { max-width: 1240px; margin: 0 auto; padding-block: 56px 44px; display: flex; flex-direction: column; gap: 18px; }
+.cover h1 { color: var(--on-brand); }
+.cover .eyebrow { color: var(--on-brand-2); }
+.cover .lede { color: var(--on-brand-2); }
+.cover .lede b { color: var(--on-brand); font-weight: 600; }
+.cover-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 28px; margin: 10px 0 0; padding-top: 20px; border-top: 1px solid rgb(255 255 255 / 0.16); }
+.cover-meta dt { font: 600 0.7rem/1.3 var(--font-body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--on-brand-2); }
+.cover-meta dd { margin: 4px 0 0; font-size: 0.92rem; color: var(--on-brand); }
+
+/* layout: contents rail + main column */
+.layout { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 48px; padding-block: 40px 96px; }
+.rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; max-height: calc(100vh - 48px); overflow-y: auto; font-size: 0.84rem; }
+.rail ol { list-style: none; margin: 10px 0 0; padding: 0; border-left: 1px solid var(--line); }
+.rail li a { display: block; padding: 4px 0 4px 14px; margin-left: -1px; border-left: 2px solid transparent; color: var(--ink-3); text-decoration: none; line-height: 1.35; }
+.rail li a:hover { color: var(--ink); }
+.rail li a[aria-current="true"] { color: var(--ink); border-left-color: var(--brand-rule); font-weight: 600; }
+.rail .group { margin-top: 12px; padding: 4px 0 2px 14px; font: 600 0.68rem/1.2 var(--font-body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+main { display: flex; flex-direction: column; gap: 56px; min-width: 0; }
+main > section { display: flex; flex-direction: column; gap: 18px; }
+main > section + section { border-top: 1px solid var(--line); padding-top: 40px; }
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .rail { position: static; max-height: none; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 16px 18px; }
+  .rail ol { columns: 2 220px; column-gap: 24px; border-left: 0; }
+  .rail li a { padding-left: 0; border-left: 0; }
+  .rail .group { padding-left: 0; break-after: avoid; }
+}
+
+.key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.key::before { content: ""; width: 10px; height: 10px; border-radius: 2px; background: var(--c); }
+.key.duck { --c: var(--duck); }
+.key.jq { --c: var(--jq); }
+
+/* summary */
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.fact { padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; border-left: 1px solid var(--line); }
+.fact:first-child { border-left: 0; }
+.fact b { font: 700 1.9rem/1.1 var(--font-head); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.fact span { color: var(--ink-2); font-size: 0.9rem; line-height: 1.45; }
+@media (max-width: 700px) { .fact { border-left: 0; border-top: 1px solid var(--line); } .fact:first-child { border-top: 0; } }
+
+.glossary { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0 32px; margin: 0; }
+.glossary div { padding: 12px 0; border-top: 1px solid var(--line); }
+.glossary dt { font-weight: 600; }
+.glossary dd { margin: 2px 0 0; color: var(--ink-2); font-size: 0.93rem; }
+
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 20px 22px 16px; display: flex; flex-direction: column; gap: 12px; }
+figure .scroll { overflow-x: auto; }
+figure svg { display: block; width: 100%; height: auto; }
+figure .scroll svg { min-width: 600px; }
+figure.diagram .scroll svg { min-width: 820px; }
+figcaption { color: var(--ink-2); font-size: 0.9rem; max-width: 74ch; border-top: 1px solid var(--line); padding-top: 10px; }
+figcaption b { color: var(--ink); }
+.fig-title { font-weight: 600; font-size: 0.95rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.86rem; color: var(--ink-2); }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px 28px; }
+.pair .panel { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.pair .panel h4 { font-size: 0.9rem; }
+
+details { font-size: 0.88rem; }
+details summary { cursor: pointer; color: var(--ink-3); width: fit-content; }
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
+figure .table-wrap, details .table-wrap { border: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+thead th { background: var(--surface-2); font-weight: 600; color: var(--ink-3); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.84rem; white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+.compare td:first-child { font-weight: 600; width: 20%; }
+
+.bench { border-top: 2px solid var(--brand-rule); }
+.bench-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.tag { font: 500 0.74rem/1 var(--font-mono); padding: 5px 8px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-2); }
+.qa { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; font-size: 0.94rem; }
+.qa dt { font-weight: 600; color: var(--ink); }
+.qa dd { margin: 0; color: var(--ink-2); }
+.callout { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px 18px; color: var(--ink-2); }
+.callout b { color: var(--ink); }
+ul.plain { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
+pre { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; overflow-x: auto; font: 0.84rem/1.55 var(--font-mono); }
+
+/* strengths and limits */
+.score { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.score-card { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+.score-card h3 { display: flex; align-items: center; gap: 8px; }
+.score-row { display: grid; grid-template-columns: 120px 1fr 2.2em; align-items: center; gap: 10px; font-size: 0.88rem; }
+.score-bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.score-bar span { display: block; height: 100%; border-radius: 4px; background: var(--c); }
+.score-row b { text-align: right; font: 600 0.9rem var(--font-mono); }
+.verdict { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.8rem; color: var(--ink); white-space: nowrap; }
+.verdict i { font-style: normal; display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; font-size: 0.66rem; line-height: 1; color: var(--surface); background: var(--c); }
+.strong { --c: var(--good); }
+.limited { --c: var(--warn); }
+.cannot { --c: var(--bad); }
+.na { --c: var(--neutral-mark); }
+.matrix td { width: 37%; }
+.matrix td:first-child { width: 26%; font-weight: 500; }
+.matrix .note { display: block; margin-top: 3px; color: var(--ink-2); font-size: 0.85rem; line-height: 1.45; }
+.matrix tr.area th { background: var(--surface); color: var(--ink); font-size: 0.78rem; padding-top: 16px; border-bottom: 1px solid var(--line-strong); }
+.limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.limits > div { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 16px 18px; }
+.limits ul { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.limits li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; font-size: 0.92rem; }
+.limits li .dash { color: var(--ink-3); }
+.limits li span.fix { display: block; color: var(--ink-2); font-size: 0.86rem; }
+
+/* services */
+.svc-list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.svc { display: grid; grid-template-columns: minmax(170px, 230px) minmax(0, 1fr); gap: 12px 36px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+.svc-head { display: flex; flex-direction: column; gap: 6px; }
+.svc-head p { color: var(--ink-2); font-size: 0.92rem; }
+.svc ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 7px; }
+.svc ol li::marker { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.svc-out { margin-top: 14px; font-size: 0.9rem; color: var(--ink-2); padding-top: 10px; border-top: 1px dashed var(--line); }
+@media (max-width: 760px) { .svc { grid-template-columns: minmax(0, 1fr); } }
+
+/* charts */
+.chart .grid { stroke: var(--grid); stroke-width: 1; }
+.chart .axis { stroke: var(--line-strong); stroke-width: 1; }
+.chart .tick { fill: var(--ink-3); font: 11.5px var(--font-mono); }
+.chart .axis-title { fill: var(--ink-3); font: 12px var(--font-body); }
+.chart .label { fill: var(--ink-2); font: 12.5px var(--font-body); }
+.chart .value { fill: var(--ink); font: 500 12px var(--font-mono); }
+.chart .end-label { fill: var(--ink); font: 600 12.5px var(--font-body); }
+.chart [data-tip] { cursor: default; outline: none; }
+.chart [data-tip]:focus-visible .mark-ring { stroke: var(--ink); }
+
+/* diagrams */
+.dg { color: var(--ink-3); font-family: var(--font-body); }
+.dg .box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.25; }
+.dg .bus { fill: var(--accent-soft); stroke: var(--ink-3); stroke-width: 1.25; }
+.dg .duck { fill: var(--duck-soft); stroke: var(--duck); stroke-width: 1.25; }
+.dg .jq { fill: var(--jq-soft); stroke: var(--jq); stroke-width: 1.25; }
+.dg .file { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1; }
+.dg .bad { fill: var(--surface); stroke: var(--bad); stroke-width: 1.25; }
+.dg .t { fill: var(--ink); font-size: 13.5px; font-weight: 600; }
+.dg .s { fill: var(--ink-2); font-size: 11.5px; }
+.dg .m { fill: var(--ink-2); font: 11px var(--font-mono); }
+.dg .edge { stroke: currentColor; stroke-width: 1.4; fill: none; }
+.dg .el { fill: var(--ink-2); font-size: 11.5px; }
+.dg .life { stroke: var(--line-strong); stroke-width: 1; }
+.dg .arrowhead { fill: currentColor; }
+
+#tip {
+  position: fixed; z-index: 20; pointer-events: none; max-width: 260px;
+  background: var(--ink); color: var(--surface); border-radius: 4px; padding: 8px 10px;
+  font: 12.5px/1.45 var(--font-body); box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+}
+#tip b { font-weight: 600; }
+@media (max-width: 560px) {
+  .cover-inner { padding-block: 36px 28px; }
+  .layout { padding-block: 24px 64px; }
+  figure { padding: 14px 12px 12px; }
+  .qa { grid-template-columns: 1fr; gap: 2px; }
+  .qa dd { margin-bottom: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+
+<header class="cover gutter">
+  <div class="cover-inner">
+    <span class="eyebrow">Technical report · Trade-data transformation proof of concept</span>
+    <h1>DuckDB vs jq Benchmarks</h1>
+    <p class="lede">One pipeline turns tables of trade data into clean, nested JSON. We ran it on the same data with <b>DuckDB</b> and with <b>jq</b>, measured every step, and checked that both produced the same result. This report explains each benchmark in plain words.</p>
+    <dl class="cover-meta">
+      <div><dt>Date</dt><dd>22 October 2026</dd></div>
+      <div><dt>Test machine</dt><dd>Apple Silicon · 10 cores · 16 GB RAM</dd></div>
+      <div><dt>Versions</dt><dd>DuckDB 1.5.6 · jq 1.8.2 · Python 3.13</dd></div>
+      <div><dt>Data</dt><dd>5 thousand to 5 million synthetic trades</dd></div>
+    </dl>
+  </div>
+</header>
+
+<div class="layout gutter">
+<nav class="rail" aria-label="Contents">
+  <span class="eyebrow">Contents</span>
+  <ol>
+    <li><a href="#short">Summary</a></li>
+    <li class="group" aria-hidden="true">Background</li>
+    <li><a href="#words">Words used in this report</a></li>
+    <li><a href="#data">The test data</a></li>
+    <li><a href="#services">The services</a></li>
+    <li><a href="#pipeline">The pipeline</a></li>
+    <li><a href="#engines">How each engine moves data</a></li>
+    <li><a href="#flow">How one run flows through the system</a></li>
+    <li><a href="#method">How we measured</a></li>
+    <li class="group" aria-hidden="true">Benchmarks</li>
+    <li><a href="#b1">Benchmark 1 · Total time by size</a></li>
+    <li><a href="#b2">Benchmark 2 · Rows per second</a></li>
+    <li><a href="#b3">Benchmark 3 · Time per stage</a></li>
+    <li><a href="#b4">Benchmark 4 · Memory</a></li>
+    <li><a href="#b5">Benchmark 5 · DuckDB on one core</a></li>
+    <li><a href="#b6">Benchmark 6 · Deep nesting and long chains</a></li>
+    <li><a href="#b7">Benchmark 7 · CSV vs Parquet</a></li>
+    <li><a href="#b8">Benchmark 8 · Repeat run</a></li>
+    <li><a href="#b9">Benchmark 9 · Tuning jq</a></li>
+    <li><a href="#b10">Benchmark 10 · Data quality and correctness</a></li>
+    <li><a href="#b11">Benchmark 11 · Fixing DuckDB’s memory use</a></li>
+    <li class="group" aria-hidden="true">Conclusions</li>
+    <li><a href="#alternatives">Better alternatives for this scenario</a></li>
+    <li><a href="#fivem">What about 5 million rows?</a></li>
+    <li><a href="#limits">Strengths and limits by scenario</a></li>
+    <li><a href="#compare">Side-by-side comparison</a></li>
+    <li><a href="#codebase">How the codebase is organised</a></li>
+    <li><a href="#rerun">Run it yourself</a></li>
+  </ol>
+</nav>
+
+<main>
+<section aria-labelledby="short">
+  <h2 id="short">Summary</h2>
+  <div class="facts">
+    <div class="fact"><b>29×</b><span>jq took 29 times longer than DuckDB for 1 million trades (5 min 14 s vs 11 s).</span></div>
+    <div class="fact"><b>20×</b><span>DuckDB was still 20 times faster when we let it use only one CPU core, like jq.</span></div>
+    <div class="fact"><b>4× less</b><span>jq used about four times less memory (632 MB vs 2.6 GB at 1 million trades).</span></div>
+    <div class="fact"><b>10 of 10</b><span>benchmark comparisons produced the same JSON from both engines. We checked every time.</span></div>
+  </div>
+  <p class="prose">Use <b>DuckDB</b> for this kind of work: big tables, joins, links between rows, and totals. Keep <b>jq</b> for small jobs on JSON files. DuckDB’s higher memory use can be fixed: with two settings it used 60% less memory and ran twice as fast (<a href="#b11">Benchmark 11</a>).</p>
+</section>
+
+<section aria-labelledby="words">
+  <h2 id="words">Words used in this report</h2>
+  <dl class="glossary">
+    <div><dt>DuckDB</dt><dd>A database engine that runs inside your program. It reads CSV and Parquet directly and runs SQL. It works on whole columns at once and can use all CPU cores.</dd></div>
+    <div><dt>jq</dt><dd>A command-line tool for JSON. It reads one JSON record, changes it, writes it out, then reads the next. It uses one CPU core.</dd></div>
+    <div><dt>CSV</dt><dd>A plain text table. Commas separate the values.</dd></div>
+    <div><dt>Parquet</dt><dd>A compressed table file that stores data column by column. It is much smaller and faster to read than CSV.</dd></div>
+    <div><dt>NDJSON</dt><dd>A text file with one JSON document per line. Both engines write their results in this format.</dd></div>
+    <div><dt>Trade / row</dt><dd>One line in the trades table: one trade or one change to a trade.</dd></div>
+    <div><dt>Stage</dt><dd>One step of the pipeline: ingest, clean, validate, transform, aggregate.</dd></div>
+    <div><dt>Wall time</dt><dd>Real time on a clock, from start to finish. All speeds in this report are wall time.</dd></div>
+    <div><dt>CPU time</dt><dd>How long the processor worked. With four cores busy for 1 second, CPU time is 4 seconds.</dd></div>
+    <div><dt>Cores used</dt><dd>CPU time divided by wall time. 1.0 means one core was busy the whole time.</dd></div>
+    <div><dt>Peak memory (RSS)</dt><dd>The most RAM used at any moment, counting the worker and every process it started.</dd></div>
+    <div><dt>Rows per second</dt><dd>Input rows divided by total time. Higher is better.</dd></div>
+    <div><dt>Slowdown (× DuckDB)</dt><dd>jq time divided by DuckDB time. “29×” means jq took 29 times as long.</dd></div>
+    <div><dt>Backward reference</dt><dd>A row that points to an earlier row. Example: an amendment points to the original trade.</dd></div>
+    <div><dt>Forward reference</dt><dd>A row that points to a row further down the file. A stream reader has not seen it yet.</dd></div>
+    <div><dt>Deep nesting</dt><dd>A parent inside a parent inside a parent, written as nested JSON objects.</dd></div>
+    <div><dt>Cycle</dt><dd>A loop in the links: A’s parent is B and B’s parent is A. Following parents never ends.</dd></div>
+    <div><dt>Dirty data</dt><dd>Duplicates, missing values, wrong formats and broken links. The test data has all of them on purpose.</dd></div>
+    <div><dt>Verification</dt><dd>An automatic check that both engines produced the same JSON for the same input.</dd></div>
+    <div><dt>Event</dt><dd>A short message that says something happened, like “StageCompleted”. Services talk through events.</dd></div>
+    <div><dt>Worker process</dt><dd>A separate program that does the heavy work, so the API stays quick.</dd></div>
+  </dl>
+</section>
+
+<section aria-labelledby="data">
+  <h2 id="data">The test data</h2>
+  <div class="prose stack">
+    <p>The data service creates fake but realistic trade data. It makes five tables that point at each other. The same settings always make the same files, so any test can be repeated.</p>
+  </div>
+  <figure class="diagram">
+    <div class="scroll">
+    <svg class="dg" viewBox="0 0 900 330" role="img" aria-label="Data model: each trade points to a book, an FX rate, a counterparty and an instrument. Counterparties point to their parent, instruments point to an issuer and an underlying instrument, and trades point to the previous version of the trade.">
+      <defs><marker id="ah-e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <path class="edge" d="M420,120 C420,72 470,72 470,120" marker-end="url(#ah-e)"/>
+      <text class="el" x="445" y="62" text-anchor="middle">previous_trade_id (amendments)</text>
+      <rect class="box" x="340" y="120" width="200" height="80" rx="6"/>
+      <text class="t" x="440" y="155" text-anchor="middle">Trade</text>
+      <text class="s" x="440" y="176" text-anchor="middle">one row per trade event</text>
+
+      <rect class="box" x="30" y="40" width="170" height="56" rx="6"/>
+      <text class="t" x="115" y="65" text-anchor="middle">Book</text>
+      <text class="s" x="115" y="83" text-anchor="middle">desk and trader</text>
+      <rect class="box" x="30" y="226" width="170" height="56" rx="6"/>
+      <text class="t" x="115" y="251" text-anchor="middle">FX rate</text>
+      <text class="s" x="115" y="269" text-anchor="middle">currency to USD</text>
+      <rect class="box" x="670" y="40" width="180" height="56" rx="6"/>
+      <text class="t" x="760" y="65" text-anchor="middle">Counterparty</text>
+      <text class="s" x="760" y="83" text-anchor="middle">the other side of the trade</text>
+      <rect class="box" x="670" y="226" width="180" height="56" rx="6"/>
+      <text class="t" x="760" y="251" text-anchor="middle">Instrument</text>
+      <text class="s" x="760" y="269" text-anchor="middle">what was traded</text>
+
+      <line class="edge" x1="340" y1="140" x2="202" y2="74" marker-end="url(#ah-e)"/>
+      <text class="el" x="262" y="96" text-anchor="middle">book_id</text>
+      <line class="edge" x1="340" y1="182" x2="202" y2="250" marker-end="url(#ah-e)"/>
+      <text class="el" x="262" y="236" text-anchor="middle">currency</text>
+      <line class="edge" x1="540" y1="140" x2="668" y2="74" marker-end="url(#ah-e)"/>
+      <text class="el" x="612" y="96" text-anchor="middle">counterparty_id</text>
+      <line class="edge" x1="540" y1="182" x2="668" y2="250" marker-end="url(#ah-e)"/>
+      <text class="el" x="612" y="236" text-anchor="middle">instrument_id</text>
+      <line class="edge" x1="760" y1="226" x2="760" y2="98" marker-end="url(#ah-e)"/>
+      <text class="el" x="768" y="166">issuer</text>
+      <path class="edge" d="M850,56 C890,46 890,90 852,82" marker-end="url(#ah-e)"/>
+      <text class="el" x="760" y="26" text-anchor="middle">parent counterparty (7 levels deep, some loops)</text>
+      <path class="edge" d="M850,242 C890,232 890,276 852,268" marker-end="url(#ah-e)"/>
+      <text class="el" x="760" y="306" text-anchor="middle">underlying instrument</text>
+    </svg>
+    </div>
+    <figcaption><b>Every arrow is a link the pipeline must follow.</b> Three links point back into the same table: trade to an earlier trade, counterparty to its parent, instrument to its underlying.</figcaption>
+  </figure>
+
+  <div class="prose stack">
+    <p>We added problems on purpose, about 2% of rows. This is what makes the job hard:</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Problem</th><th>Example in the data</th><th>What the pipeline does</th></tr></thead>
+      <tbody>
+        <tr><td>Duplicates</td><td>The same row twice</td><td>Keeps the first one</td></tr>
+        <tr><td>Missing values</td><td>No currency, no settlement date</td><td>Fills currency from the instrument, settlement as trade date + 2 days</td></tr>
+        <tr><td>Messy formats</td><td><code>"1,250"</code>, <code>" buy "</code>, <code>usd</code>, <code>10/01/2025</code></td><td>Cleans them into one format</td></tr>
+        <tr><td>Bad values</td><td><code>N/A</code>, negative price, <code>2025-02-30</code></td><td>Rejects the trade with a reason</td></tr>
+        <tr><td>Broken links</td><td>A counterparty id that does not exist</td><td>Rejects the trade with a reason</td></tr>
+        <tr><td>Backward / forward references</td><td>An amendment arrives before its original</td><td>Builds the full version chain anyway</td></tr>
+        <tr><td>Deep nesting</td><td>Parent of parent of parent…</td><td>Writes the full chain as nested JSON</td></tr>
+        <tr><td>Cycles</td><td>A’s parent is B, B’s parent is A</td><td>Detects the loop and adds a warning</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Dataset</th><th class="n">Trades</th><th class="n">Counterparties</th><th class="n">Instruments</th><th class="n">Parquet size</th><th class="n">CSV size</th><th class="n">Made in</th></tr></thead>
+      <tbody>
+        <tr><td>5k</td><td class="n">5,000</td><td class="n">101</td><td class="n">50</td><td class="n">0.1 MB</td><td class="n">0.6 MB</td><td class="n">0.05 s</td></tr>
+        <tr><td>50k</td><td class="n">50,000</td><td class="n">1,010</td><td class="n">500</td><td class="n">1 MB</td><td class="n">6 MB</td><td class="n">0.3 s</td></tr>
+        <tr><td>500k</td><td class="n">500,000</td><td class="n">10,100</td><td class="n">5,000</td><td class="n">8 MB</td><td class="n">56 MB</td><td class="n">2.5 s</td></tr>
+        <tr><td>1M</td><td class="n">1,000,000</td><td class="n">20,200</td><td class="n">10,000</td><td class="n">15 MB</td><td class="n">112 MB</td><td class="n">5.3 s</td></tr>
+        <tr><td>5M</td><td class="n">5,000,000</td><td class="n">50,500</td><td class="n">20,000</td><td class="n">76 MB</td><td class="n">553 MB</td><td class="n">29.6 s</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="services">
+  <h2 id="services">The services and how they work</h2>
+  <div class="prose stack">
+    <p>The system has three services: <b>Dataset</b>, <b>Pipeline</b> and <b>Benchmark</b>. They share one backbone: an event bus, a pool of worker processes and a state keeper. Three rules shape every workflow:</p>
+    <ul class="plain">
+      <li><b>Answer first, work later.</b> A request is saved and answered at once. The work itself starts in the background.</li>
+      <li><b>Talk through events.</b> A service never calls another service directly. It announces what happened, such as “DatasetReady”, and every part that cares reacts.</li>
+      <li><b>Heavy work runs in a worker process.</b> Each job gets a fresh process, so jobs never share memory and the system stays responsive.</li>
+    </ul>
+  </div>
+  <figure class="diagram">
+    <div class="scroll">
+    <svg class="dg" viewBox="0 0 980 370" role="img" aria-label="Architecture: a request reaches a service, which saves it and publishes a Requested event on the event bus. Orchestrators react by sending jobs to worker processes. Workers send progress events back through a queue. The state keeper saves every event, and a live feed pushes every event back to the user.">
+      <defs><marker id="ah-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="box" x="20" y="150" width="130" height="70" rx="6"/>
+      <text class="t" x="85" y="180" text-anchor="middle">User</text>
+      <text class="s" x="85" y="199" text-anchor="middle">dashboard or CLI</text>
+
+      <rect class="box" x="195" y="118" width="175" height="134" rx="6"/>
+      <text class="t" x="282" y="142" text-anchor="middle">Services</text>
+      <text class="s" x="282" y="168" text-anchor="middle">Dataset</text>
+      <text class="s" x="282" y="188" text-anchor="middle">Pipeline</text>
+      <text class="s" x="282" y="208" text-anchor="middle">Benchmark</text>
+      <text class="m" x="282" y="234" text-anchor="middle">save · announce</text>
+
+      <rect class="bus" x="425" y="155" width="130" height="60" rx="30"/>
+      <text class="t" x="490" y="181" text-anchor="middle">Event bus</text>
+      <text class="s" x="490" y="199" text-anchor="middle">delivers in order</text>
+
+      <rect class="box" x="615" y="40" width="170" height="64" rx="6"/>
+      <text class="t" x="700" y="67" text-anchor="middle">Orchestrators</text>
+      <text class="s" x="700" y="86" text-anchor="middle">start background work</text>
+      <rect class="box" x="615" y="158" width="170" height="54" rx="6"/>
+      <text class="t" x="700" y="181" text-anchor="middle">State keeper</text>
+      <text class="s" x="700" y="199" text-anchor="middle">applies every event</text>
+      <rect class="box" x="615" y="270" width="170" height="54" rx="6"/>
+      <text class="t" x="700" y="293" text-anchor="middle">Live feed</text>
+      <text class="s" x="700" y="311" text-anchor="middle">pushes to the dashboard</text>
+
+      <rect class="box" x="830" y="20" width="140" height="110" rx="6"/>
+      <text class="t" x="900" y="44" text-anchor="middle">Worker processes</text>
+      <text class="s" x="900" y="68" text-anchor="middle">generate data</text>
+      <text class="s" x="900" y="86" text-anchor="middle">run a pipeline</text>
+      <text class="s" x="900" y="104" text-anchor="middle">verify outputs</text>
+      <rect class="box" x="830" y="158" width="140" height="54" rx="6"/>
+      <text class="t" x="900" y="181" text-anchor="middle">Saved state</text>
+      <text class="s" x="900" y="199" text-anchor="middle">records · datasets</text>
+
+      <line class="edge" x1="150" y1="176" x2="193" y2="176" marker-end="url(#ah-a)"/>
+      <text class="el" x="172" y="168" text-anchor="middle">request</text>
+      <line class="edge" x1="195" y1="210" x2="152" y2="210" marker-end="url(#ah-a)"/>
+      <text class="el" x="172" y="228" text-anchor="middle">accepted</text>
+      <line class="edge" x1="370" y1="185" x2="423" y2="185" marker-end="url(#ah-a)"/>
+      <text class="el" x="397" y="176" text-anchor="middle">Requested</text>
+      <path class="edge" d="M470,155 V72 H613" marker-end="url(#ah-a)"/>
+      <text class="el" x="542" y="64" text-anchor="middle">Requested events</text>
+      <line class="edge" x1="555" y1="185" x2="613" y2="185" marker-end="url(#ah-a)"/>
+      <text class="el" x="585" y="176" text-anchor="middle">all</text>
+      <path class="edge" d="M490,215 V297 H613" marker-end="url(#ah-a)"/>
+      <text class="el" x="552" y="289" text-anchor="middle">all events</text>
+      <line class="edge" x1="785" y1="72" x2="828" y2="72" marker-end="url(#ah-a)"/>
+      <text class="el" x="806" y="64" text-anchor="middle">job</text>
+      <path class="edge" d="M830,122 H535 V153" marker-end="url(#ah-a)"/>
+      <text class="el" x="690" y="116" text-anchor="middle">progress events (queue)</text>
+      <line class="edge" x1="785" y1="185" x2="828" y2="185" marker-end="url(#ah-a)"/>
+      <text class="el" x="806" y="176" text-anchor="middle">saves</text>
+      <path class="edge" d="M700,324 V352 H85 V222" marker-end="url(#ah-a)"/>
+      <text class="el" x="400" y="345" text-anchor="middle">live progress</text>
+    </svg>
+    </div>
+    <figcaption><b>Services never do heavy work themselves.</b> They save the request and announce it. Orchestrators pass the job to a worker process. Workers report progress through a queue back onto the bus, and the state keeper records every change.</figcaption>
+  </figure>
+
+  <div class="svc-list">
+    <article class="svc">
+      <div class="svc-head">
+        <span class="eyebrow">Service 1</span>
+        <h3>Dataset service</h3>
+        <p>Creates or accepts the input data and keeps it ready for reuse.</p>
+      </div>
+      <div>
+        <ol>
+          <li><b>Request.</b> You ask for a size, for example 1 million trades, or you upload your own CSV or Parquet files.</li>
+          <li><b>Reuse check.</b> The dataset’s name comes from its settings: size, seed and amount of dirty data. If that dataset already exists, it is reused and nothing is generated again.</li>
+          <li><b>Pending.</b> The service saves a “pending” record and announces <i>DatasetGenerationRequested</i>.</li>
+          <li><b>Build in a worker.</b> A worker builds the five tables, adds the planned problems (duplicates, gaps, broken links, loops) and writes Parquet and CSV files. For uploads, the worker instead checks that every required column exists and counts the rows.</li>
+          <li><b>Ready or failed.</b> The service announces <i>DatasetReady</i> with row counts and file sizes, or <i>DatasetFailed</i> with the reason.</li>
+        </ol>
+        <p class="svc-out"><b>Leaves behind:</b> one folder per dataset with the data files and a manifest. The same settings always produce exactly the same files, so any test can be repeated.</p>
+      </div>
+    </article>
+    <article class="svc">
+      <div class="svc-head">
+        <span class="eyebrow">Service 2</span>
+        <h3>Pipeline service</h3>
+        <p>Cleans, validates and transforms one dataset with each chosen engine, then proves the results match.</p>
+      </div>
+      <div>
+        <ol>
+          <li><b>Request.</b> You pick a ready dataset, the engines, and optional filters: a trade-date range, instrument types, a minimum size, or latest versions only.</li>
+          <li><b>Plan.</b> The service saves one comparison and one run per engine, all “queued”, and announces <i>ComparisonRequested</i>.</li>
+          <li><b>Run each engine.</b> The orchestrator sends one engine at a time to a fresh worker. Inside the worker, the pipeline runner drives the five stages in a fixed order while a monitor measures time, CPU and memory. Every stage start and finish is announced, so progress shows live.</li>
+          <li><b>Handle failure.</b> If a stage fails, that run stops, its half-written files are deleted and the error is saved. The other engine still runs.</li>
+          <li><b>Verify.</b> When all runs have finished, a verification job compares the engines’ outputs document by document.</li>
+          <li><b>Complete.</b> The service announces <i>ComparisonCompleted</i> with the timings, the slowdown factor and the verdict.</li>
+        </ol>
+        <p class="svc-out"><b>Leaves behind:</b> for each engine, the finished trades, the rejected trades with reasons, the exposure totals and a data-quality report.</p>
+      </div>
+    </article>
+    <article class="svc">
+      <div class="svc-head">
+        <span class="eyebrow">Service 3</span>
+        <h3>Benchmark service</h3>
+        <p>Measures both engines across several sizes without the runs disturbing each other.</p>
+      </div>
+      <div>
+        <ol>
+          <li><b>Request.</b> You choose the sizes (for example 5 thousand to 1 million trades), the engines and the file format.</li>
+          <li><b>Prepare data.</b> For each size, smallest first, it makes sure the dataset exists. If not, it asks the Dataset service and waits until the data is ready.</li>
+          <li><b>Compare.</b> It runs a full comparison through the Pipeline service workflow and waits for it to finish.</li>
+          <li><b>Free disk.</b> It deletes the large output files. Timings, quality reports and exposure totals are kept.</li>
+          <li><b>Next size.</b> Only then does the next size start. Two sizes never run at the same time, so they never compete for CPU or memory.</li>
+          <li><b>Report.</b> When the last size is done, the result table is saved.</li>
+        </ol>
+        <p class="svc-out"><b>Leaves behind:</b> a results table for every size and engine, saved as a readable report and as data.</p>
+      </div>
+    </article>
+  </div>
+
+  <figure class="diagram">
+    <div class="fig-title">The states each piece of work moves through</div>
+    <div class="scroll">
+    <svg class="dg" viewBox="0 0 1080 390" role="img" aria-label="State diagram. A dataset goes from pending to ready, or to failed. A pipeline run goes from queued to running through five stages to succeeded, or to failed. A comparison goes from queued to running to verifying to completed. Each arrow is labelled with the event that causes it.">
+      <defs><marker id="ah-l" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <text class="t" x="10" y="52">Dataset</text>
+      <text class="s" x="10" y="70">Dataset service</text>
+      <rect class="box" x="160" y="40" width="118" height="38" rx="19"/><text class="t" x="219" y="64" text-anchor="middle">pending</text>
+      <rect class="box" x="420" y="40" width="118" height="38" rx="19"/><text class="t" x="479" y="64" text-anchor="middle">ready</text>
+      <rect class="bad" x="420" y="92" width="118" height="38" rx="19"/><text class="t" x="479" y="116" text-anchor="middle">failed</text>
+      <line class="edge" x1="278" y1="59" x2="418" y2="59" marker-end="url(#ah-l)"/>
+      <text class="el" x="349" y="51" text-anchor="middle">DatasetReady</text>
+      <path class="edge" d="M219,78 V111 H418" marker-end="url(#ah-l)"/>
+      <text class="el" x="325" y="104" text-anchor="middle">DatasetFailed</text>
+
+      <text class="t" x="10" y="200">Pipeline run</text>
+      <text class="s" x="10" y="218">one per engine</text>
+      <rect class="box" x="160" y="188" width="118" height="38" rx="19"/><text class="t" x="219" y="212" text-anchor="middle">queued</text>
+      <rect class="duck" x="420" y="188" width="118" height="38" rx="19"/><text class="t" x="479" y="212" text-anchor="middle">running</text>
+      <rect class="box" x="680" y="188" width="118" height="38" rx="19"/><text class="t" x="739" y="212" text-anchor="middle">succeeded</text>
+      <rect class="bad" x="680" y="240" width="118" height="38" rx="19"/><text class="t" x="739" y="264" text-anchor="middle">failed</text>
+      <path class="edge" d="M455,188 C455,152 503,152 503,186" marker-end="url(#ah-l)"/>
+      <text class="el" x="512" y="162">StageStarted, StageCompleted ×5</text>
+      <line class="edge" x1="278" y1="207" x2="418" y2="207" marker-end="url(#ah-l)"/>
+      <text class="el" x="349" y="199" text-anchor="middle">RunStarted</text>
+      <line class="edge" x1="538" y1="207" x2="678" y2="207" marker-end="url(#ah-l)"/>
+      <text class="el" x="609" y="199" text-anchor="middle">RunFinished</text>
+      <path class="edge" d="M479,226 V259 H678" marker-end="url(#ah-l)"/>
+      <text class="el" x="585" y="252" text-anchor="middle">RunFinished, with error</text>
+
+      <text class="t" x="10" y="340">Comparison</text>
+      <text class="s" x="10" y="358">Pipeline service</text>
+      <rect class="box" x="160" y="328" width="118" height="38" rx="19"/><text class="t" x="219" y="352" text-anchor="middle">queued</text>
+      <rect class="box" x="420" y="328" width="118" height="38" rx="19"/><text class="t" x="479" y="352" text-anchor="middle">running</text>
+      <rect class="box" x="680" y="328" width="118" height="38" rx="19"/><text class="t" x="739" y="352" text-anchor="middle">verifying</text>
+      <rect class="box" x="940" y="328" width="118" height="38" rx="19"/><text class="t" x="999" y="352" text-anchor="middle">completed</text>
+      <line class="edge" x1="278" y1="347" x2="418" y2="347" marker-end="url(#ah-l)"/>
+      <text class="el" x="349" y="339" text-anchor="middle">ComparisonStarted</text>
+      <line class="edge" x1="538" y1="347" x2="678" y2="347" marker-end="url(#ah-l)"/>
+      <text class="el" x="609" y="339" text-anchor="middle">VerificationStarted</text>
+      <line class="edge" x1="798" y1="347" x2="938" y2="347" marker-end="url(#ah-l)"/>
+      <text class="el" x="869" y="339" text-anchor="middle">ComparisonCompleted</text>
+    </svg>
+    </div>
+    <figcaption><b>Every arrow is an event.</b> The state keeper moves each record to its next state when the event arrives. A comparison waits in “running” while its pipeline runs go through their own states, one engine after another.</figcaption>
+  </figure>
+
+  <h3>The shared backbone</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Part</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><b>Event bus</b></td><td>Delivers every event to every part that listens, in the order it was published.</td></tr>
+        <tr><td><b>Orchestrators</b></td><td>Listen for “Requested” events and start the matching background work.</td></tr>
+        <tr><td><b>Worker pool</b></td><td>Runs jobs in separate processes, two at a time by default, so several datasets or comparisons can be processed in parallel. A crashed worker is replaced automatically.</td></tr>
+        <tr><td><b>Progress queue</b></td><td>Carries events from the worker processes back to the event bus.</td></tr>
+        <tr><td><b>State keeper</b></td><td>The only part that writes saved state. It turns each event into an update of a record on disk. After a restart, work that was cut off is marked as interrupted.</td></tr>
+        <tr><td><b>Live feed</b></td><td>Pushes every event to the dashboard the moment it happens.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="pipeline">
+  <h2 id="pipeline">The pipeline</h2>
+  <div class="prose stack">
+    <p>Both engines run the same five stages, with the same rules. Only the tool inside each stage changes.</p>
+  </div>
+  <figure class="diagram">
+    <div class="scroll">
+    <svg class="dg" viewBox="0 0 980 230" role="img" aria-label="Pipeline: source files go through ingest, clean, validate, transform and aggregate, producing trades, rejects, exposures and a quality report.">
+      <defs><marker id="ah-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="file" x="10" y="64" width="112" height="76" rx="6"/>
+      <text class="t" x="66" y="96" text-anchor="middle">Source files</text>
+      <text class="s" x="66" y="116" text-anchor="middle">CSV or Parquet</text>
+
+      <g>
+        <rect class="box" x="146" y="64" width="122" height="76" rx="6"/>
+        <text class="t" x="207" y="96" text-anchor="middle">1 Ingest</text>
+        <text class="s" x="207" y="116" text-anchor="middle">load as text</text>
+        <text class="s" x="207" y="168" text-anchor="middle">5 tables, every</text>
+        <text class="s" x="207" y="184" text-anchor="middle">column as text</text>
+      </g>
+      <g>
+        <rect class="box" x="290" y="64" width="122" height="76" rx="6"/>
+        <text class="t" x="351" y="96" text-anchor="middle">2 Clean</text>
+        <text class="s" x="351" y="116" text-anchor="middle">fix and de-dupe</text>
+        <text class="s" x="351" y="168" text-anchor="middle">trim, parse dates</text>
+        <text class="s" x="351" y="184" text-anchor="middle">and numbers, fill gaps</text>
+      </g>
+      <g>
+        <rect class="box" x="434" y="64" width="122" height="76" rx="6"/>
+        <text class="t" x="495" y="96" text-anchor="middle">3 Validate</text>
+        <text class="s" x="495" y="116" text-anchor="middle">13 rules</text>
+        <text class="s" x="495" y="168" text-anchor="middle">bad rows go to</text>
+        <text class="s" x="495" y="184" text-anchor="middle">rejects, with reasons</text>
+      </g>
+      <g>
+        <rect class="box" x="578" y="64" width="122" height="76" rx="6"/>
+        <text class="t" x="639" y="96" text-anchor="middle">4 Transform</text>
+        <text class="s" x="639" y="116" text-anchor="middle">join and nest</text>
+        <text class="s" x="639" y="168" text-anchor="middle">follow every link,</text>
+        <text class="s" x="639" y="184" text-anchor="middle">build nested JSON</text>
+      </g>
+      <g>
+        <rect class="box" x="722" y="64" width="122" height="76" rx="6"/>
+        <text class="t" x="783" y="96" text-anchor="middle">5 Aggregate</text>
+        <text class="s" x="783" y="116" text-anchor="middle">sum exposure</text>
+        <text class="s" x="783" y="168" text-anchor="middle">per parent company,</text>
+        <text class="s" x="783" y="184" text-anchor="middle">by currency</text>
+      </g>
+      <rect class="file" x="866" y="34" width="106" height="136" rx="6"/>
+      <text class="t" x="919" y="58" text-anchor="middle">Outputs</text>
+      <text class="m" x="919" y="84" text-anchor="middle">trades</text>
+      <text class="m" x="919" y="104" text-anchor="middle">rejects</text>
+      <text class="m" x="919" y="124" text-anchor="middle">exposures</text>
+      <text class="m" x="919" y="144" text-anchor="middle">quality report</text>
+
+      <line class="edge" x1="122" y1="102" x2="144" y2="102" marker-end="url(#ah-p)"/>
+      <line class="edge" x1="268" y1="102" x2="288" y2="102" marker-end="url(#ah-p)"/>
+      <line class="edge" x1="412" y1="102" x2="432" y2="102" marker-end="url(#ah-p)"/>
+      <line class="edge" x1="556" y1="102" x2="576" y2="102" marker-end="url(#ah-p)"/>
+      <line class="edge" x1="700" y1="102" x2="720" y2="102" marker-end="url(#ah-p)"/>
+      <line class="edge" x1="844" y1="102" x2="864" y2="102" marker-end="url(#ah-p)"/>
+    </svg>
+    </div>
+    <figcaption><b>Five stages, always in this order.</b> Each stage is timed on its own, so we can see exactly where each engine spends its time.</figcaption>
+  </figure>
+  <div class="prose stack">
+    <p>One finished trade looks like this (shortened). Note the nested parent company and the version chain:</p>
+  </div>
+  <pre>{
+  "trade_id": "TR0000000074", "event_type": "CANCEL", "side": "SELL",
+  "economics": { "quantity": 46651, "price": 23.2474, "currency": "GBP", "notional_usd": 1378526.33 },
+  "counterparty": {
+    "counterparty_id": "CP0000060", "hierarchy_path": ["CP0000057", "CP0000060"],
+    "parent": { "counterparty_id": "CP0000057", "country": "GB", "parent": null }
+  },
+  "lineage": { "version": 3, "chain": ["TR0000000007", "TR0000000043", "TR0000000074"], "is_latest": true },
+  "data_quality": { "warnings": [] }
+}</pre>
+</section>
+
+<section aria-labelledby="engines">
+  <h2 id="engines">How each engine moves data</h2>
+  <div class="prose stack">
+    <p>This is the main reason for the speed gap. DuckDB keeps the data in memory, in columns, from start to end. jq can only read JSON text, so each step reads a file, parses every line, and writes a new file. Any step that needs to “look at everything” needs an extra pass.</p>
+  </div>
+  <figure class="diagram">
+    <div class="scroll">
+    <svg class="dg" viewBox="0 0 1020 340" role="img" aria-label="DuckDB keeps all tables inside one in-memory connection and writes JSON once at the end. jq needs DuckDB to convert the files to NDJSON first, then runs 13 separate jq processes that each read and write an NDJSON file.">
+      <defs><marker id="ah-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <text class="t" x="10" y="22">DuckDB</text>
+      <text class="s" x="72" y="22">1 process · all cores · data stays in memory</text>
+      <rect class="file" x="10" y="62" width="90" height="56" rx="6"/>
+      <text class="t" x="55" y="86" text-anchor="middle">CSV /</text>
+      <text class="t" x="55" y="104" text-anchor="middle">Parquet</text>
+      <rect class="duck" x="140" y="34" width="660" height="112" rx="10"/>
+      <text class="s" x="160" y="54">one DuckDB connection: tables in memory, run by SQL</text>
+      <rect class="box" x="160" y="68" width="108" height="56" rx="6"/><text class="t" x="214" y="92" text-anchor="middle">raw_*</text><text class="s" x="214" y="110" text-anchor="middle">ingest</text>
+      <rect class="box" x="288" y="68" width="108" height="56" rx="6"/><text class="t" x="342" y="92" text-anchor="middle">clean_*</text><text class="s" x="342" y="110" text-anchor="middle">clean</text>
+      <rect class="box" x="416" y="68" width="108" height="56" rx="6"/><text class="t" x="470" y="92" text-anchor="middle">validated</text><text class="s" x="470" y="110" text-anchor="middle">validate</text>
+      <rect class="box" x="544" y="68" width="108" height="56" rx="6"/><text class="t" x="598" y="92" text-anchor="middle">dims, lineage</text><text class="s" x="598" y="110" text-anchor="middle">transform</text>
+      <rect class="box" x="672" y="68" width="108" height="56" rx="6"/><text class="t" x="726" y="92" text-anchor="middle">out_*</text><text class="s" x="726" y="110" text-anchor="middle">aggregate</text>
+      <rect class="file" x="840" y="62" width="164" height="56" rx="6"/>
+      <text class="t" x="922" y="86" text-anchor="middle">JSON outputs</text>
+      <text class="s" x="922" y="104" text-anchor="middle">written once</text>
+      <line class="edge" x1="100" y1="90" x2="138" y2="90" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="268" y1="96" x2="286" y2="96" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="396" y1="96" x2="414" y2="96" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="524" y1="96" x2="542" y2="96" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="652" y1="96" x2="670" y2="96" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="800" y1="90" x2="838" y2="90" marker-end="url(#ah-d)"/>
+
+      <text class="t" x="10" y="196">jq</text>
+      <text class="s" x="34" y="196">13 processes · 1 core each · JSON text between every step</text>
+      <rect class="file" x="10" y="240" width="90" height="56" rx="6"/>
+      <text class="t" x="55" y="264" text-anchor="middle">CSV /</text>
+      <text class="t" x="55" y="282" text-anchor="middle">Parquet</text>
+      <rect class="duck" x="120" y="240" width="104" height="56" rx="6"/>
+      <text class="t" x="172" y="264" text-anchor="middle">DuckDB</text>
+      <text class="s" x="172" y="282" text-anchor="middle">to NDJSON</text>
+      <rect class="file" x="250" y="240" width="74" height="56" rx="6"/><text class="t" x="287" y="264" text-anchor="middle">raw</text><text class="m" x="287" y="282" text-anchor="middle">.ndjson</text>
+      <rect class="jq" x="340" y="240" width="64" height="56" rx="6"/><text class="t" x="372" y="264" text-anchor="middle">jq ×5</text><text class="s" x="372" y="282" text-anchor="middle">clean</text>
+      <rect class="file" x="420" y="240" width="74" height="56" rx="6"/><text class="t" x="457" y="264" text-anchor="middle">clean</text><text class="m" x="457" y="282" text-anchor="middle">.ndjson</text>
+      <rect class="jq" x="510" y="240" width="64" height="56" rx="6"/><text class="t" x="542" y="264" text-anchor="middle">jq ×4</text><text class="s" x="542" y="282" text-anchor="middle">validate</text>
+      <rect class="file" x="590" y="240" width="74" height="56" rx="6"/><text class="t" x="627" y="264" text-anchor="middle">valid</text><text class="m" x="627" y="282" text-anchor="middle">.ndjson</text>
+      <rect class="jq" x="680" y="240" width="64" height="56" rx="6"/><text class="t" x="712" y="264" text-anchor="middle">jq ×3</text><text class="s" x="712" y="282" text-anchor="middle">transform</text>
+      <rect class="file" x="760" y="240" width="74" height="56" rx="6"/><text class="t" x="797" y="264" text-anchor="middle">trades</text><text class="m" x="797" y="282" text-anchor="middle">.ndjson</text>
+      <rect class="jq" x="850" y="240" width="64" height="56" rx="6"/><text class="t" x="882" y="264" text-anchor="middle">jq ×1</text><text class="s" x="882" y="282" text-anchor="middle">aggregate</text>
+      <rect class="file" x="930" y="240" width="74" height="56" rx="6"/><text class="t" x="967" y="264" text-anchor="middle">totals</text><text class="m" x="967" y="282" text-anchor="middle">.ndjson</text>
+      <line class="edge" x1="100" y1="268" x2="118" y2="268" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="224" y1="268" x2="248" y2="268" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="324" y1="268" x2="338" y2="268" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="404" y1="268" x2="418" y2="268" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="494" y1="268" x2="508" y2="268" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="574" y1="268" x2="588" y2="268" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="664" y1="268" x2="678" y2="268" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="744" y1="268" x2="758" y2="268" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="834" y1="268" x2="848" y2="268" marker-end="url(#ah-d)"/>
+      <line class="edge" x1="914" y1="268" x2="928" y2="268" marker-end="url(#ah-d)"/>
+      <text class="s" x="250" y="326">Each jq box re-reads JSON text, parses every line and writes JSON text again.</text>
+    </svg>
+    </div>
+    <figcaption><b>DuckDB turns data into JSON once. jq parses and writes JSON at every step.</b> jq cannot read CSV or Parquet, so DuckDB converts the files first; that time counts as jq’s ingest. jq needs extra passes because a stream cannot look ahead: to check that a referenced trade exists, it must first read every trade id.</figcaption>
+  </figure>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Stage</th><th>DuckDB does it with</th><th>jq does it with</th><th>What jq must keep in memory</th></tr></thead>
+      <tbody>
+        <tr><td>Ingest</td><td>Reads CSV/Parquet into tables</td><td>DuckDB converts files to NDJSON</td><td>Nothing</td></tr>
+        <tr><td>Clean</td><td>SQL with window functions</td><td>5 passes (4 small tables + trades)</td><td>Every trade id seen so far</td></tr>
+        <tr><td>Validate</td><td>One SQL join query</td><td>4 passes: id set, rules, rejects, counts</td><td>All trade ids + all lookup tables</td></tr>
+        <tr><td>Transform</td><td>Recursive SQL queries + joins</td><td>3 passes: lookups, version links, shaping</td><td>Lookup tables + version links</td></tr>
+        <tr><td>Aggregate</td><td>GROUP BY</td><td>1 streaming <code>reduce</code></td><td>One running total per group</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="flow">
+  <h2 id="flow">How one run flows through the system</h2>
+  <div class="prose stack">
+    <p>This is what happens when you ask for a comparison. Time goes from top to bottom. Each arrow is an event or a call.</p>
+  </div>
+  <figure class="diagram">
+    <div class="scroll">
+    <svg class="dg" viewBox="0 0 900 560" role="img" aria-label="Sequence of one comparison: the API publishes ComparisonRequested and returns 202. The orchestrator runs the DuckDB pipeline in a worker, which sends stage events, then the jq pipeline, then verification, then publishes ComparisonCompleted. The event bus pushes every event to the browser.">
+      <defs><marker id="ah-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <rect class="box" x="15" y="16" width="110" height="44" rx="6"/><text class="t" x="70" y="43" text-anchor="middle">User</text>
+      <rect class="box" x="160" y="16" width="120" height="44" rx="6"/><text class="t" x="220" y="43" text-anchor="middle">Service</text>
+      <rect class="bus" x="320" y="16" width="140" height="44" rx="22"/><text class="t" x="390" y="43" text-anchor="middle">Event bus</text>
+      <rect class="box" x="500" y="16" width="140" height="44" rx="6"/><text class="t" x="570" y="43" text-anchor="middle">Orchestrator</text>
+      <rect class="box" x="690" y="16" width="190" height="44" rx="6"/><text class="t" x="785" y="36" text-anchor="middle">Worker process</text><text class="s" x="785" y="52" text-anchor="middle">a new one per job</text>
+      <line class="life" x1="70" y1="60" x2="70" y2="545"/>
+      <line class="life" x1="220" y1="60" x2="220" y2="545"/>
+      <line class="life" x1="390" y1="60" x2="390" y2="545"/>
+      <line class="life" x1="570" y1="60" x2="570" y2="545"/>
+      <line class="life" x1="785" y1="60" x2="785" y2="545"/>
+
+      <line class="edge" x1="70" y1="95" x2="218" y2="95" marker-end="url(#ah-s)"/><text class="el" x="145" y="88" text-anchor="middle">ask for a comparison</text>
+      <line class="edge" x1="220" y1="125" x2="388" y2="125" marker-end="url(#ah-s)"/><text class="el" x="305" y="118" text-anchor="middle">ComparisonRequested</text>
+      <line class="edge" x1="220" y1="155" x2="72" y2="155" marker-end="url(#ah-s)"/><text class="el" x="145" y="148" text-anchor="middle">accepted, with an id</text>
+      <line class="edge" x1="390" y1="185" x2="568" y2="185" marker-end="url(#ah-s)"/><text class="el" x="480" y="178" text-anchor="middle">start comparison</text>
+      <line class="edge" x1="570" y1="215" x2="783" y2="215" marker-end="url(#ah-s)"/><text class="el" x="677" y="208" text-anchor="middle">run DuckDB pipeline</text>
+      <line class="edge" x1="785" y1="245" x2="392" y2="245" marker-end="url(#ah-s)"/><text class="el" x="588" y="238" text-anchor="middle">RunStarted, StageStarted / StageCompleted ×5</text>
+      <line class="edge" x1="570" y1="275" x2="392" y2="275" marker-end="url(#ah-s)"/><text class="el" x="480" y="268" text-anchor="middle">RunFinished (DuckDB)</text>
+      <line class="edge" x1="570" y1="305" x2="783" y2="305" marker-end="url(#ah-s)"/><text class="el" x="677" y="298" text-anchor="middle">run jq pipeline</text>
+      <line class="edge" x1="785" y1="335" x2="392" y2="335" marker-end="url(#ah-s)"/><text class="el" x="588" y="328" text-anchor="middle">RunStarted, StageStarted / StageCompleted ×5</text>
+      <line class="edge" x1="570" y1="365" x2="392" y2="365" marker-end="url(#ah-s)"/><text class="el" x="480" y="358" text-anchor="middle">RunFinished (jq)</text>
+      <line class="edge" x1="570" y1="395" x2="783" y2="395" marker-end="url(#ah-s)"/><text class="el" x="677" y="388" text-anchor="middle">verify outputs</text>
+      <line class="edge" x1="570" y1="425" x2="392" y2="425" marker-end="url(#ah-s)"/><text class="el" x="485" y="418" text-anchor="middle">ComparisonCompleted</text>
+      <line class="edge" x1="390" y1="465" x2="72" y2="465" marker-end="url(#ah-s)"/><text class="el" x="230" y="458" text-anchor="middle">every event, live</text>
+      <line class="edge" x1="70" y1="505" x2="218" y2="505" marker-end="url(#ah-s)"/><text class="el" x="145" y="498" text-anchor="middle">read the results</text>
+      <text class="s" x="390" y="540" text-anchor="middle">the state keeper records every event</text>
+    </svg>
+    </div>
+    <figcaption><b>One comparison makes 28 events.</b> The engines run one after another, never at the same time, so they do not compete for CPU. You get an answer at step two and can follow the rest live.</figcaption>
+  </figure>
+</section>
+
+<section aria-labelledby="method">
+  <h2 id="method">How we measured</h2>
+  <ul class="plain prose">
+    <li><b>Same input, same rules.</b> Both engines read the same files and apply the same 13 rules in the same order.</li>
+    <li><b>Same output, checked.</b> After each comparison, a checker matches the two outputs document by document. Above 200,000 rows it fully compares a fixed sample of about 50,000 documents, and still checks every row count and every key.</li>
+    <li><b>Same stopwatch.</b> One monitor wraps every stage. It records wall time, CPU time and peak memory every 50 ms, including child processes.</li>
+    <li><b>Clean process per run.</b> Each run starts in a fresh worker process, so memory left over from one run does not affect the next.</li>
+    <li><b>One at a time.</b> Benchmarks run sizes and engines one after another, never in parallel.</li>
+    <li><b>Fair to jq.</b> jq code streams wherever it can, never loads the whole trade file at once, and was tuned after profiling (see Benchmark 9).</li>
+    <li><b>Single runs.</b> Each number comes from one run. Benchmark 8 shows how much a repeat run can differ.</li>
+  </ul>
+</section>
+
+<section class="bench" aria-labelledby="b1">
+  <div class="bench-head"><span class="eyebrow">Benchmark 1</span><span class="tag">Parquet · 5k to 1M trades</span></div>
+  <h2 id="b1">Total time by size</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>How long does the whole pipeline take, from files to finished JSON?</dd>
+    <dt>Setup</dt><dd>Four dataset sizes, both engines, 2% dirty data, outputs verified.</dd>
+  </dl>
+  <figure class="chart">
+    <div class="fig-title">Total time per run (log scale: each grid line is 10× the one below)</div>
+    <div class="legend"><span class="key duck">DuckDB</span><span class="key jq">jq</span></div>
+    <div class="scroll"><div id="c-total"></div></div>
+    <figcaption>Both lines go up as the data grows, but jq’s line sits <b>7× to 40× higher</b>. At 1 million trades DuckDB needs 11 seconds and jq needs 5 minutes 14 seconds.</figcaption>
+    <details><summary>Data table</summary><div class="table-wrap" id="t-total"></div></details>
+  </figure>
+  <div class="prose stack">
+    <p><b>What it means.</b> The gap grows from 7× to 40× between 5k and 500k trades. At 1M it drops back to 29×. That is not jq getting better: DuckDB slowed down while writing 1.2 GB of JSON on a nearly full disk (see Benchmark 3).</p>
+  </div>
+</section>
+
+<section class="bench" aria-labelledby="b2">
+  <div class="bench-head"><span class="eyebrow">Benchmark 2</span><span class="tag">same runs as Benchmark 1</span></div>
+  <h2 id="b2">Rows per second</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>How many input rows does each engine handle per second?</dd>
+    <dt>How to read it</dt><dd>Higher is better. A flat line means the engine does not get more efficient with more data.</dd>
+  </dl>
+  <figure class="chart">
+    <div class="fig-title">Throughput (input rows per second)</div>
+    <div class="legend"><span class="key duck">DuckDB</span><span class="key jq">jq</span></div>
+    <div class="scroll"><div id="c-rate"></div></div>
+    <figcaption><b>jq is flat at about 3,000 rows per second at every size.</b> DuckDB rises to about 134,000 rows per second at 500k, because its fixed start-up costs are spread over more rows.</figcaption>
+    <details><summary>Data table</summary><div class="table-wrap" id="t-rate"></div></details>
+  </figure>
+</section>
+
+<section class="bench" aria-labelledby="b3">
+  <div class="bench-head"><span class="eyebrow">Benchmark 3</span><span class="tag">1M trades · per stage</span></div>
+  <h2 id="b3">Time per stage</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>Where does each engine spend its time, and which stages show the biggest gap?</dd>
+  </dl>
+  <figure class="chart">
+    <div class="fig-title">How many times longer jq takes, per stage (1M trades)</div>
+    <div class="scroll"><div id="c-ratio"></div></div>
+    <figcaption><b>The gap is biggest where the data must be checked against itself.</b> Validate is 288× slower in jq: it has to read all trade ids first, then read everything again to check the links. DuckDB does it with one join.</figcaption>
+    <details><summary>Data table</summary><div class="table-wrap" id="t-stage"></div></details>
+  </figure>
+  <figure class="chart">
+    <div class="fig-title">Share of each engine’s own time, per stage (1M trades)</div>
+    <div class="pair">
+      <div class="panel"><h4><span class="key duck">DuckDB · 11.0 s in total</span></h4><div id="c-share-duck"></div></div>
+      <div class="panel"><h4><span class="key jq">jq · 5 min 14 s in total</span></h4><div id="c-share-jq"></div></div>
+    </div>
+    <figcaption><b>82% of DuckDB’s time is the transform stage.</b> That stage writes 1.2 GB of nested JSON. Cleaning and validating a million rows takes DuckDB under one second. jq spends its time more evenly, because every stage parses and writes JSON.</figcaption>
+  </figure>
+</section>
+
+<section class="bench" aria-labelledby="b4">
+  <div class="bench-head"><span class="eyebrow">Benchmark 4</span><span class="tag">same runs as Benchmark 1</span></div>
+  <h2 id="b4">Memory</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>What is the most RAM each engine used during a run?</dd>
+    <dt>How to read it</dt><dd>Lower is better. Numbers include the Python worker (about 100 MB).</dd>
+  </dl>
+  <figure class="chart">
+    <div class="fig-title">Peak memory per run (MB)</div>
+    <div class="legend"><span class="key duck">DuckDB</span><span class="key jq">jq</span></div>
+    <div class="scroll"><div id="c-mem"></div></div>
+    <figcaption><b>jq wins on memory.</b> It streams: it keeps only what each pass must remember. DuckDB keeps whole tables in memory to work fast, and used 2.6 GB at 1M trades.</figcaption>
+    <details><summary>Data table</summary><div class="table-wrap" id="t-mem"></div></details>
+  </figure>
+  <div class="callout prose">jq’s memory still grows with the data, because it must remember every trade id it has seen. It also cannot move data to disk when memory runs out. DuckDB can: above its memory limit (8 GB here) it spills to disk instead of failing. The POC also stops jq automatically if it goes over 12 GB. <a href="#b11">Benchmark 11</a> shows how to bring DuckDB’s memory close to jq’s.</div>
+</section>
+
+<section class="bench" aria-labelledby="b5">
+  <div class="bench-head"><span class="eyebrow">Benchmark 5</span><span class="tag">1M trades · DuckDB limited to 1 thread</span></div>
+  <h2 id="b5">DuckDB on one core</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>Is DuckDB fast only because it uses more cores?</dd>
+    <dt>Setup</dt><dd>We set <code>POC_ENGINE__DUCKDB_THREADS=1</code>, so DuckDB uses one core, like jq.</dd>
+  </dl>
+  <figure class="chart">
+    <div class="fig-title">Total time, 1M trades</div>
+    <div class="scroll"><div id="c-thread"></div></div>
+    <figcaption><b>No. On one core DuckDB takes 15.6 s, still 20× faster than jq.</b> More cores only saved DuckDB about 5 seconds. Most of the speed comes from working on columns in memory, instead of parsing JSON text again and again.</figcaption>
+    <details><summary>Data table</summary><div class="table-wrap" id="t-thread"></div></details>
+  </figure>
+</section>
+
+<section class="bench" aria-labelledby="b6">
+  <div class="bench-head"><span class="eyebrow">Benchmark 6</span><span class="tag">50k trades · stress tests</span></div>
+  <h2 id="b6">Deep nesting and long chains</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>Does one engine break when links get very deep or very long?</dd>
+    <dt>Setup</dt><dd>Same 50k size, three versions of the data: normal (parents 7 levels deep, up to 5 versions per trade), <b>deep</b> (parents 200 levels deep), and <b>long chains</b> (up to 100 versions per trade).</dd>
+  </dl>
+  <figure class="chart">
+    <div class="fig-title">Transform stage time (each panel has its own scale)</div>
+    <div class="pair">
+      <div class="panel"><h4><span class="key duck">DuckDB</span></h4><div id="c-stress-duck"></div></div>
+      <div class="panel"><h4><span class="key jq">jq</span></h4><div id="c-stress-jq"></div></div>
+    </div>
+    <figcaption><b>Both engines slow down by a similar amount, about 2 to 3 times.</b> Neither one breaks. The output itself gets bigger: a trade under a 200-level parent chain carries 200 nested objects.</figcaption>
+    <details><summary>Data table</summary><div class="table-wrap" id="t-stress"></div></details>
+  </figure>
+  <div class="prose stack">
+    <p><b>What it means.</b> The difference is in how each engine expresses the work, not in how it scales:</p>
+    <ul class="plain">
+      <li><b>DuckDB</b> has no data type for “an object that contains itself”, so a parent chain of unknown depth cannot be a normal typed column. We built that one column as JSON inside a recursive query. It works, but that column loses its types.</li>
+      <li><b>DuckDB</b> recursive queries can loop forever on a cycle. We start from the top parents and walk down, so loops are never entered and are flagged instead.</li>
+      <li><b>jq</b> handles nesting naturally with recursion, but needs a “seen” list to stop on cycles, and needs the full set of version links in memory to follow chains.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="bench" aria-labelledby="b7">
+  <div class="bench-head"><span class="eyebrow">Benchmark 7</span><span class="tag">500k trades · CSV source</span></div>
+  <h2 id="b7">CSV vs Parquet</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>Does the input file format change the result?</dd>
+  </dl>
+  <div class="table-wrap" id="t-format"></div>
+  <div class="prose stack">
+    <p><b>Not much.</b> Reading CSV made ingest a little slower for both engines (DuckDB +0.08 s, jq +0.16 s). DuckDB’s total went up more, but almost all of that was in the transform stage, which never reads the source file. That part is normal run-to-run noise in writing output. For jq the totals are within 1%.</p>
+  </div>
+</section>
+
+<section class="bench" aria-labelledby="b8">
+  <div class="bench-head"><span class="eyebrow">Benchmark 8</span><span class="tag">5k to 500k · run twice</span></div>
+  <h2 id="b8">Repeat run</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>How stable are these numbers if we run the same benchmark again?</dd>
+  </dl>
+  <div class="table-wrap" id="t-repeat"></div>
+  <div class="prose stack">
+    <p><b>Runs differ by up to 17%.</b> The slowdown factor stayed almost the same (40.0× and 39.9× at 500k). Treat small differences as noise. For a formal result, run each size several times and use the middle value (median).</p>
+  </div>
+</section>
+
+<section class="bench" aria-labelledby="b9">
+  <div class="bench-head"><span class="eyebrow">Benchmark 9</span><span class="tag">aggregate stage · 100k real output documents</span></div>
+  <h2 id="b9">Tuning jq</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>Is jq slow because of how we wrote it?</dd>
+    <dt>Setup</dt><dd>We wrote the same aggregation three ways and timed each on the same 100,000 documents.</dd>
+  </dl>
+  <figure class="chart">
+    <div class="fig-title">Same result, three ways to write it in jq</div>
+    <div class="scroll"><div id="c-tune"></div></div>
+    <figcaption><b>How you write jq changes its speed a lot.</b> Cutting each document down to the six fields we need, before adding it up, made the pass 2.6× faster. One flat lookup table with joined keys was 4× slower still.</figcaption>
+    <details><summary>Data table</summary><div class="table-wrap" id="t-tune"></div></details>
+  </figure>
+  <div class="prose stack">
+    <p>At 1 million trades this tuning cut jq’s aggregate stage from <b>188 s to 47.5 s</b>. A smaller test showed one more rule: updating a group with <code>.[$k] |= …</code> was 1.6× slower than updating its fields directly. The final code uses the fastest form everywhere. Even tuned, jq is far behind DuckDB, because every jq pass still has to parse JSON text: a pass that only parses and counts the 1M-row output already takes 18 s.</p>
+  </div>
+</section>
+
+<section class="bench" aria-labelledby="b10">
+  <div class="bench-head"><span class="eyebrow">Benchmark 10</span><span class="tag">1M trades · output check</span></div>
+  <h2 id="b10">Data quality and correctness</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>Did both engines find the same problems and produce the same JSON?</dd>
+    <dt>Answer</dt><dd><b>Yes, in all 10 benchmark comparisons.</b> The numbers below are identical for both engines.</dd>
+  </dl>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Step at 1M trades</th><th class="n">Rows</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Raw rows read</td><td class="n">1,000,000</td><td>Everything in the file</td></tr>
+        <tr><td>Duplicates removed</td><td class="n">10,000</td><td>Exact copies, first one kept</td></tr>
+        <tr><td>Rejected</td><td class="n">8,999</td><td>Broke at least one rule; written to <code>rejects.ndjson</code> with reasons</td></tr>
+        <tr><td>Final JSON documents</td><td class="n">981,001</td><td>Valid trades, fully nested</td></tr>
+        <tr><td>Exposure groups</td><td class="n">9,194</td><td>One total per top parent company</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="chart">
+    <div class="fig-title">Why trades were rejected (1M trades; one trade can break several rules)</div>
+    <div class="scroll"><div id="c-errors"></div></div>
+    <figcaption><b>The most common problem was a counterparty id that does not exist.</b> Another 3,922 settlement dates and 2,997 currencies were missing but could be filled in, so those trades were kept with a warning.</figcaption>
+  </figure>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Output</th><th class="n">DuckDB rows</th><th class="n">jq rows</th><th class="n">Documents compared in depth</th><th class="n">Differences</th></tr></thead>
+      <tbody>
+        <tr><td>trades</td><td class="n">981,001</td><td class="n">981,001</td><td class="n">48,941 (sample)</td><td class="n">0</td></tr>
+        <tr><td>rejects</td><td class="n">8,999</td><td class="n">8,999</td><td class="n">8,999 (all)</td><td class="n">0</td></tr>
+        <tr><td>exposures</td><td class="n">9,194</td><td class="n">9,194</td><td class="n">9,194 (all)</td><td class="n">0</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="bench" aria-labelledby="b11">
+  <div class="bench-head"><span class="eyebrow">Benchmark 11</span><span class="tag">1M trades · DuckDB only · 12 runs</span></div>
+  <h2 id="b11">Fixing DuckDB’s memory use</h2>
+  <dl class="qa prose">
+    <dt>Question</dt><dd>Can DuckDB use less memory without losing its speed?</dd>
+    <dt>Answer</dt><dd><b>Yes.</b> Two settings cut peak memory by about 60% and made the run twice as fast. A third brings it near jq’s memory.</dd>
+  </dl>
+  <div class="prose stack">
+    <p><b>Where the memory goes.</b> Memory peaks in the transform stage. By default, DuckDB first builds the full nested result (981,001 documents) as a table in memory, then writes it to JSON. That one table is most of the 3 GB.</p>
+    <p>We tried each setting on its own, then together: 12 runs in one session, one after another. Automated tests check that every setting produces exactly the same JSON as the default. The default here (3.2 GB, 6.3 s) differs from Benchmark 1 (2.6 GB, 11.0 s), which ran when the disk was almost full and writing was slower; compare settings within this benchmark only.</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Setting</th><th>What it does</th><th>Environment variable</th></tr></thead>
+      <tbody>
+        <tr><td><b>Lean mode</b> (new in this POC)</td><td>Streams the JSON straight out of the query instead of building the table first. Drops tables as soon as no later stage needs them.</td><td><code>POC_ENGINE__DUCKDB_LEAN=true</code></td></tr>
+        <tr><td><b>Unordered output</b></td><td>Lets DuckDB write rows in any order. It no longer has to hold rows back to keep them in file order.</td><td><code>POC_ENGINE__DUCKDB_PRESERVE_INSERTION_ORDER=false</code></td></tr>
+        <tr><td><b>Memory limit</b></td><td>A hard cap. Above it DuckDB moves data to temporary files on disk (“spilling”).</td><td><code>POC_ENGINE__DUCKDB_MEMORY_LIMIT=1GB</code></td></tr>
+        <tr><td><b>On-disk database</b></td><td>Keeps tables in a database file instead of in memory.</td><td><code>POC_ENGINE__DUCKDB_STORAGE=disk</code></td></tr>
+        <tr><td><b>Fewer threads</b></td><td>Fewer cores working at once, so fewer buffers in memory.</td><td><code>POC_ENGINE__DUCKDB_THREADS=2</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="chart">
+    <div class="fig-title">Each setting at 1M trades (same rows, same order in both panels)</div>
+    <div class="legend"><span class="key duck">Recommended settings</span><span class="key" style="--c: var(--neutral-mark)">Other settings</span></div>
+    <div class="pair">
+      <div class="panel"><h4>Peak memory</h4><div id="c-mem-fix"></div></div>
+      <div class="panel"><h4>Total time</h4><div id="c-time-fix"></div></div>
+    </div>
+    <figcaption><b>Lean + unordered is the clear winner: 1.4 GB and 3.2 s</b>, against about 3.2 GB and 6.3 s for the default. Adding a 512 MB limit and an on-disk database brings the peak down to 752 MB, close to jq’s 632 MB, at 7.9 s. jq needs 314 s.</figcaption>
+    <details><summary>Data table</summary><div class="table-wrap" id="t-mem-fix"></div></details>
+  </figure>
+  <div class="prose stack">
+    <p><b>What each result means:</b></p>
+    <ul class="plain">
+      <li><b>A memory limit alone fails.</b> With 1 GB and default settings, DuckDB stopped with “Out of Memory”, because the full nested table cannot fit. The limit only works together with lean mode, which never builds that table.</li>
+      <li><b>Lean mode alone saves memory but is slower</b> (7.9 s). Keeping file order makes the streamed output wait, and the aggregate stage has to rebuild the documents. With unordered output, it becomes the fastest run of all.</li>
+      <li><b>An on-disk database alone does not help</b> (3.4 GB, 13.7 s). The peak is in the query that builds the result, not in the stored tables, and the disk reads and writes add time.</li>
+      <li><b>Two threads</b> saved about 20% memory (2.6 GB) at the same speed.</li>
+    </ul>
+  </div>
+  <div class="callout prose"><b>Two things to watch.</b> First, spilling needs free disk. A run with only a 512 MB limit failed with “No space left on device” on the nearly full test disk, so we could not measure it. Second, unordered output changes the order of rows in the JSON file (the content is the same), and if two duplicate rows are <i>not</i> identical, the “first one wins” rule follows read order instead of file order. Our duplicates are exact copies, so results did not change.</div>
+  <div class="prose stack">
+    <p><b>Other ways to cut memory</b> (not measured here): write Parquet instead of JSON for files that only machines read; process the data in chunks, for example one month of trades at a time, since the lookup tables are small; or use a machine with more RAM, which is often the cheapest fix.</p>
+  </div>
+</section>
+
+<section aria-labelledby="alternatives">
+  <h2 id="alternatives">Better alternatives for this scenario</h2>
+  <div class="prose stack">
+    <p>Our job is: read tables (1 to 5 million rows) on one machine, clean and check them, follow links between rows, build nested JSON, and add up totals. These are the realistic options. <b>We did not benchmark them in this POC</b>; the notes come from each tool’s documented features.</p>
+  </div>
+  <div class="table-wrap">
+    <table class="compare">
+      <thead><tr><th>Tool</th><th>What it is</th><th>Good for this job</th><th>Weak for this job</th><th>Choose it when</th></tr></thead>
+      <tbody>
+        <tr><td>DuckDB, lean settings</td><td>In-process SQL engine (this POC)</td><td>Fast joins, recursive SQL, reads Parquet and CSV, writes nested JSON, spills to disk</td><td>Recursive nested objects need a JSON workaround</td><td>Data fits on one machine. <b>Our pick.</b></td></tr>
+        <tr><td>Polars</td><td>Fast DataFrame library for Python, written in Rust</td><td>As fast as DuckDB for joins and totals; streaming mode for low memory; Python code instead of SQL</td><td>No recursive queries: parent chains and version chains need a loop of joins, one per level</td><td>Your team prefers Python DataFrame code to SQL</td></tr>
+        <tr><td>Apache DataFusion</td><td>SQL engine in Rust, built on Apache Arrow</td><td>SQL with recursive queries, streaming, spills to disk</td><td>Smaller community; fewer ready-made file helpers</td><td>You build the service in Rust</td></tr>
+        <tr><td>chDB / ClickHouse</td><td>ClickHouse’s column engine, embedded (chDB) or as a server</td><td>Very fast scans and totals; JSON output built in</td><td>Joins across many large tables are less flexible; recursive queries are newer</td><td>The results also need fast dashboards or queries</td></tr>
+        <tr><td>Apache Spark</td><td>Engine that spreads work over a cluster of machines</td><td>Handles data far larger than one machine; recovers from failures</td><td>Cluster cost and slow start; slower than DuckDB at 1–5M rows; no recursive SQL</td><td>Data no longer fits on one machine (hundreds of GB and up)</td></tr>
+        <tr><td>PostgreSQL</td><td>Classic row-based database</td><td>Recursive SQL, JSON building functions, results stay queryable</td><td>Much slower for bulk transforms than column engines</td><td>The output must live in an operational database</td></tr>
+        <tr><td>jaq / gojq</td><td>Faster rewrites of jq (Rust / Go)</td><td>Same jq language, often faster per record</td><td>Same model: one record at a time, extra passes for links, mostly one core</td><td>You must keep existing jq scripts</td></tr>
+        <tr><td>Custom code</td><td>Hand-written Python (orjson) or Rust</td><td>Full control; can stream with very little memory</td><td>You write and test joins, rules and recursion yourself</td><td>One very specific, very hot step</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout prose"><b>Verdict.</b> For this scenario, DuckDB with lean settings is the best fit: fastest, simplest (plain SQL), and now modest on memory. Polars is the closest alternative if you prefer Python DataFrames. Move to Spark only when the data outgrows one machine. A faster jq clone does not fix jq’s real problem, which is the extra passes needed to follow links between rows.</div>
+</section>
+
+<section aria-labelledby="fivem">
+  <h2 id="fivem">What about 5 million rows?</h2>
+  <div class="prose stack">
+    <p>The 5M dataset is made and saved (76 MB Parquet, 553 MB CSV), but we <b>did not run</b> it. Each engine writes about 1.2 GB of JSON per million trades, so a 5M comparison needs about 20 GB of free disk. The test machine had less than 5 GB.</p>
+    <p>A rough guess from the measured speeds: jq ≈ 26 minutes (it stays near 3,200 rows per second), DuckDB ≈ 1 minute. <b>These are estimates, not measurements.</b> Free about 20 GB and run <code>make benchmark</code> with <code>5m</code> to get real numbers.</p>
+  </div>
+</section>
+
+<section aria-labelledby="limits">
+  <h2 id="limits">Strengths and limits by scenario</h2>
+  <div class="prose stack">
+    <p>This section collects, in one place, what each engine does well, what it can only do with extra work, and what it cannot do at all. It covers 20 real-world scenarios, grouped by area. Where this POC measured something, the benchmark is named.</p>
+  </div>
+  <div class="score" aria-label="Scorecard">
+    <div class="score-card">
+      <h3><span class="key duck">DuckDB</span></h3>
+      <div class="score-row strong"><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="score-bar" aria-hidden="true"><span style="width:65.0%"></span></span><b>13</b></div>
+      <div class="score-row limited"><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="score-bar" aria-hidden="true"><span style="width:30.0%"></span></span><b>6</b></div>
+      <div class="score-row cannot"><span class="verdict cannot"><i aria-hidden="true">✕</i>Cannot</span><span class="score-bar" aria-hidden="true"><span style="width:5.0%"></span></span><b>1</b></div>
+    </div>
+    <div class="score-card">
+      <h3><span class="key jq">jq</span></h3>
+      <div class="score-row strong"><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="score-bar" aria-hidden="true"><span style="width:30.0%"></span></span><b>6</b></div>
+      <div class="score-row limited"><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="score-bar" aria-hidden="true"><span style="width:35.0%"></span></span><b>7</b></div>
+      <div class="score-row cannot"><span class="verdict cannot"><i aria-hidden="true">✕</i>Cannot</span><span class="score-bar" aria-hidden="true"><span style="width:30.0%"></span></span><b>6</b></div>
+      <div class="score-row na"><span class="verdict na"><i aria-hidden="true">–</i>Not applicable</span><span class="score-bar" aria-hidden="true"><span style="width:5.0%"></span></span><b>1</b></div>
+    </div>
+  </div>
+  <div class="legend">
+    <span class="verdict strong"><i aria-hidden="true">✓</i>Strong: handles it well, out of the box</span>
+    <span class="verdict limited"><i aria-hidden="true">~</i>Limited: possible, but slow, costly or needs a workaround</span>
+    <span class="verdict cannot"><i aria-hidden="true">✕</i>Cannot: not possible with the tool alone</span>
+  </div>
+  <div class="table-wrap">
+    <table class="matrix">
+      <thead><tr><th>Scenario</th><th><span class="key duck">DuckDB</span></th><th><span class="key jq">jq</span></th></tr></thead>
+      <tbody>
+        <tr class="area"><th colspan="3" scope="colgroup">Input and output</th></tr>
+        <tr><td>Read CSV or Parquet files</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Reads both directly, using all cores.</span></td><td><span class="verdict cannot"><i aria-hidden="true">✕</i>Cannot</span><span class="note">Reads JSON only. Another tool must convert the files first (DuckDB does it in this POC).</span></td></tr>
+        <tr><td>Write Parquet or other column files</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Writes Parquet, CSV and JSON.</span></td><td><span class="verdict cannot"><i aria-hidden="true">✕</i>Cannot</span><span class="note">Writes JSON or plain text only.</span></td></tr>
+        <tr><td>Records with different shapes in one file</td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">Expects one shape per table. Very mixed records end up in a generic JSON column.</span></td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Every record can have its own shape.</span></td></tr>
+        <tr class="area"><th colspan="3" scope="colgroup">Scale and speed</th></tr>
+        <tr><td>Use all CPU cores</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Runs in parallel by default (2.5 to 4.6 cores used here).</span></td><td><span class="verdict cannot"><i aria-hidden="true">✕</i>Cannot</span><span class="note">One core per process. Splitting files across several jq processes only works for steps that look at one record at a time.</span></td></tr>
+        <tr><td>Data larger than memory</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Moves data to disk above its memory limit (needs free disk, Benchmark 11).</span></td><td><span class="verdict cannot"><i aria-hidden="true">✕</i>Cannot</span><span class="note">Cannot move data to disk. A step that must remember every key fails when memory runs out.</span></td></tr>
+        <tr><td>Millions of rows in seconds</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">1 million trades in 3 to 11 seconds (Benchmarks 1 and 11).</span></td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">1 million trades took 5 min 14 s, about 3,200 rows per second (Benchmark 2).</span></td></tr>
+        <tr><td>Low memory use</td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">Holds tables in memory by default (2.6 to 3.6 GB at 1M). Lean settings bring it to 0.75 to 1.4 GB (Benchmark 11).</span></td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Streams records. 632 MB at 1M trades, much less for simple filters (Benchmark 4).</span></td></tr>
+        <tr><td>Data spread over several machines</td><td><span class="verdict cannot"><i aria-hidden="true">✕</i>Cannot</span><span class="note">Runs on one machine only.</span></td><td><span class="verdict cannot"><i aria-hidden="true">✕</i>Cannot</span><span class="note">Runs on one machine only.</span></td></tr>
+        <tr class="area"><th colspan="3" scope="colgroup">Links between rows</th></tr>
+        <tr><td>Join two large tables</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Built-in joins that can spill to disk.</span></td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">One side must be loaded into memory as a lookup table first.</span></td></tr>
+        <tr><td>A row that points to a later row (forward reference)</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Row order does not matter in SQL.</span></td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">A stream cannot look ahead. Needs an extra full pass or all data in memory (4 passes to validate here).</span></td></tr>
+        <tr><td>Sort or group the whole dataset</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Sorts and groups any size, spilling to disk if needed.</span></td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">sort_by and group_by need everything in memory. Running totals with reduce are fine.</span></td></tr>
+        <tr><td>Chains of links (parent of parent of …)</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Recursive SQL (WITH RECURSIVE) follows chains of any length (Benchmark 6).</span></td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Recursive functions follow chains of any length (Benchmark 6).</span></td></tr>
+        <tr><td>Loops in the links (A → B → A)</td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">A recursive query can run forever. The query must be designed to avoid loops, as done here.</span></td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">Must keep a list of visited ids by hand, as done here.</span></td></tr>
+        <tr class="area"><th colspan="3" scope="colgroup">Shape of the output</th></tr>
+        <tr><td>Unlimited nesting (an object inside itself)</td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">No data type can contain itself. That part must be built as JSON text, which works but loses types.</span></td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Builds nested objects of any depth naturally.</span></td></tr>
+        <tr class="area"><th colspan="3" scope="colgroup">Correctness</th></tr>
+        <tr><td>Exact money amounts (decimals)</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Has an exact DECIMAL type.</span></td><td><span class="verdict cannot"><i aria-hidden="true">✕</i>Cannot</span><span class="note">Numbers are 64-bit floating point. Sums can round, and whole numbers above 2<sup>53</sup> lose precision.</span></td></tr>
+        <tr><td>Strict date and type checks</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">try_strptime and try_cast reject invalid values.</span></td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">strptime accepts 2025-02-30 and rolls it over to 2 March. Needs an extra round-trip check (added in this POC).</span></td></tr>
+        <tr class="area"><th colspan="3" scope="colgroup">Operations</th></tr>
+        <tr><td>Predictable speed, however the code is written</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">A query optimiser plans joins and order.</span></td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">No optimiser. Rewriting the same logic changed speed up to 11× (Benchmark 9).</span></td></tr>
+        <tr><td>An endless stream of incoming events</td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">Works on data that already exists. New data must be processed in small batches.</span></td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">Reads input line by line for as long as it arrives, for per-record changes.</span></td></tr>
+        <tr><td>Several programs writing the same data at once</td><td><span class="verdict limited"><i aria-hidden="true">~</i>Limited</span><span class="note">Many readers, but only one process may write a database file at a time.</span></td><td><span class="verdict na"><i aria-hidden="true">–</i>Not applicable</span><span class="note">Not a data store; each run reads and writes its own files.</span></td></tr>
+        <tr><td>A quick one-off command in a terminal</td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">The duckdb command line runs SQL on files directly.</span></td><td><span class="verdict strong"><i aria-hidden="true">✓</i>Strong</span><span class="note">A tiny single program made for shell pipelines.</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Hard limits, and what to do instead</h3>
+  <p class="prose muted">Things each tool cannot do on its own. Most have a workaround, which is why the matrix above rates many of these scenarios as “Limited” rather than “Cannot”.</p>
+  <div class="limits">
+    <div>
+      <h4><span class="key jq">jq cannot…</span></h4>
+      <ul>
+        <li><span class="dash" aria-hidden="true">—</span><span>Read CSV or Parquet.<span class="fix">Convert to NDJSON first, for example with DuckDB.</span></span></li>
+        <li><span class="dash" aria-hidden="true">—</span><span>Use more than one CPU core in a run.<span class="fix">Split the file and run several jq processes, only for per-record steps.</span></span></li>
+        <li><span class="dash" aria-hidden="true">—</span><span>Move data to disk when memory runs out.<span class="fix">Keep the state small, or use a database engine for that step.</span></span></li>
+        <li><span class="dash" aria-hidden="true">—</span><span>Do exact decimal maths.<span class="fix">Calculate money in another tool, or work in whole cents.</span></span></li>
+        <li><span class="dash" aria-hidden="true">—</span><span>Write Parquet or other column files.<span class="fix">Write JSON, then convert with another tool.</span></span></li>
+        <li><span class="dash" aria-hidden="true">—</span><span>Check a link to a row it has not read yet, in one pass.<span class="fix">Read the data twice: first collect the ids, then check (as this POC does).</span></span></li>
+      </ul>
+    </div>
+    <div>
+      <h4><span class="key duck">DuckDB cannot…</span></h4>
+      <ul>
+        <li><span class="dash" aria-hidden="true">—</span><span>Store an object that contains itself as a typed value.<span class="fix">Build that part as JSON in a recursive query (as this POC does).</span></span></li>
+        <li><span class="dash" aria-hidden="true">—</span><span>Let several processes write one database file at the same time.<span class="fix">Funnel writes through one service, or use a server database such as PostgreSQL.</span></span></li>
+        <li><span class="dash" aria-hidden="true">—</span><span>Spread one job over several machines.<span class="fix">Use Spark or a similar engine once data outgrows one machine.</span></span></li>
+        <li><span class="dash" aria-hidden="true">—</span><span>Process an endless stream continuously.<span class="fix">Run the same query on small batches, for example every minute.</span></span></li>
+        <li><span class="dash" aria-hidden="true">—</span><span>Stop a looping recursive query by itself.<span class="fix">Design the query so loops are never entered, or track the path and stop on repeats.</span></span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout prose"><b>In short:</b> DuckDB is strong wherever the job needs the whole dataset at once: joins, links between rows, sorting, grouping, big volumes. jq is strong on single records: uneven shapes, deep nesting, small memory, endless streams and quick shell commands. This project needs the whole dataset at once, which is why DuckDB fits it better.</div>
+</section>
+
+<section aria-labelledby="compare">
+  <h2 id="compare">Side-by-side comparison</h2>
+  <div class="table-wrap">
+    <table class="compare">
+      <thead><tr><th></th><th><span class="key duck">DuckDB</span></th><th><span class="key jq">jq</span></th></tr></thead>
+      <tbody>
+        <tr><td>What it is</td><td>A SQL database inside your program</td><td>A command-line JSON filter</td></tr>
+        <tr><td>Speed at 1M trades</td><td>11.0 s</td><td>5 min 14 s (29× longer)</td></tr>
+        <tr><td>CPU cores</td><td>Uses many (about 2.5 on average here)</td><td>One</td></tr>
+        <tr><td>Memory at 1M</td><td>2.6–3.6 GB by default; 1.4 GB with lean settings, 752 MB at the leanest (Benchmark 11); can spill to disk</td><td>632 MB; cannot spill</td></tr>
+        <tr><td>Reads CSV / Parquet</td><td>Yes, directly</td><td>No, needs a converter</td></tr>
+        <tr><td>Joins and links</td><td>Built in (joins)</td><td>Build lookup tables by hand; extra passes</td></tr>
+        <tr><td>Rows that point forward</td><td>No problem</td><td>Needs a full extra pass</td></tr>
+        <tr><td>Deep nesting</td><td>Needs a JSON workaround for unknown depth</td><td>Natural (recursion)</td></tr>
+        <tr><td>Cycles</td><td>Must design the query so it cannot loop</td><td>Must track visited ids</td></tr>
+        <tr><td>Dates and numbers</td><td>Strict date parsing; real decimal types</td><td>Date parser accepts 30 Feb unless you check; numbers are floats only</td></tr>
+        <tr><td>Sensitive to how you write it</td><td>Some</td><td>Very (up to 11× in Benchmark 9)</td></tr>
+        <tr><td>Best for</td><td>Big tables, joins, checks, totals</td><td>Small JSON jobs and quick reshaping</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout prose"><b>Recommendation.</b> Use DuckDB as the engine for this transformation project. It is much faster, uses all cores, reads the source files directly and handles links between rows with plain joins. jq is still handy for looking at or tweaking the JSON that DuckDB produces.</div>
+</section>
+
+<section aria-labelledby="codebase">
+  <h2 id="codebase">How the codebase is organised</h2>
+  <div class="prose stack">
+    <p>The code follows clean architecture: the inner layers do not know about the outer ones. Each engine is a plug-in behind one interface, so adding a third engine means writing one class.</p>
+  </div>
+<pre>app/
+├── domain/          data models, events, interfaces, the 13 rule codes   (no I/O)
+├── application/     services, orchestrators, pipeline runner, verification, reports
+├── engines/
+│   ├── duckdb_engine/sql/      one SQL file per stage
+│   └── jq_engine/programs/     one jq program per pass
+├── infrastructure/  data generator, worker pool, file storage, memory monitor, live stream
+├── api/             FastAPI routes and the dashboard page
+├── bootstrap.py     wires everything together (the only place that knows every class)
+└── cli.py           generate and benchmark from the terminal</pre>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Design pattern</th><th>Where</th><th>Why it helps</th></tr></thead>
+      <tbody>
+        <tr><td>Strategy</td><td>DuckDbEngine, JqEngine</td><td>Same five stages, swappable engine</td></tr>
+        <tr><td>Template method</td><td>PipelineRunner</td><td>Stage order and timing are fixed in one place</td></tr>
+        <tr><td>Publish / subscribe</td><td>EventBus</td><td>Services react to events instead of calling each other</td></tr>
+        <tr><td>Projection</td><td>StateProjector</td><td>Only one place writes saved state</td></tr>
+        <tr><td>Ports and adapters</td><td><code>domain/ports.py</code></td><td>Business code never imports databases or files directly</td></tr>
+        <tr><td>Worker pool</td><td>ProcessJobExecutor</td><td>Many datasets can be processed at once; the API stays fast</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose muted">Quality checks: 34 automated tests (engine parity, edge cases, generator, full API flow), strict type checking with mypy, and linting with ruff.</p>
+</section>
+
+<section aria-labelledby="rerun">
+  <h2 id="rerun">Run it yourself</h2>
+<pre>make install      # install dependencies (needs jq on PATH)
+make run          # API + dashboard on http://127.0.0.1:8000
+make datasets     # create 5k, 50k, 500k, 1M and 5M (same data every time)
+make benchmark    # Benchmarks 1-4, 8, 10 (5k to 1M)
+make scenarios    # Benchmark 6 (deep nesting, long chains)
+POC_ENGINE__DUCKDB_THREADS=1 uv run python -m app.cli benchmark --sizes 1m --engines duckdb   # Benchmark 5
+POC_ENGINE__DUCKDB_LEAN=true POC_ENGINE__DUCKDB_PRESERVE_INSERTION_ORDER=false \
+  uv run python -m app.cli benchmark --sizes 1m --engines duckdb --no-verify                    # Benchmark 11</pre>
+  <p class="prose muted">Every benchmark also saves a Markdown and JSON report in <code>data/reports/</code>.</p>
+</section>
+
+</main>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const D = {
+  sizes: [5000, 50000, 500000, 1000000],
+  total: { duck: [0.226, 0.878, 3.744, 10.952], jq: [1.68, 15.014, 149.742, 313.937] },
+  rate: { duck: [22114, 56928, 133554, 91308], jq: [2977, 3330, 3339, 3185] },
+  mem: { duck: [165.2, 361.5, 1841.7, 2583.3], jq: [101.9, 128.9, 358.8, 631.7] },
+  cores: { duck: [1.98, 1.65, 2.83, 2.51], jq: [1.06, 1.07, 1.07, 1.04] },
+  stages: ["ingest", "clean", "validate", "transform", "aggregate"],
+  stage1m: { duck: [0.5565, 0.5998, 0.2067, 8.9312, 0.6577], jq: [4.7586, 90.9368, 59.6351, 111.1069, 47.4993] },
+  thread: [["DuckDB, all cores", 10.952, "duck"], ["DuckDB, 1 core", 15.567, "duck"], ["jq (always 1 core)", 313.937, "jq"]],
+  stress: {
+    labels: ["Normal data", "Parents 200 deep", "Chains up to 100"],
+    duckT: [0.5634, 1.5872, 1.0725], jqT: [5.1903, 12.1127, 11.0047],
+    duckTotal: [0.878, 1.895, 1.38], jqTotal: [15.014, 23.442, 20.016],
+    duckMem: [361.5, 683.7, 440.5], jqMem: [128.9, 138.5, 137.1],
+  },
+  format: {
+    rows: [["DuckDB", 0.2834, 0.3602, 3.744, 5.544], ["jq", 0.8893, 1.0465, 149.742, 148.355]],
+  },
+  repeat: [
+    ["5k", "DuckDB", 0.226, 0.249], ["5k", "jq", 1.68, 1.73],
+    ["50k", "DuckDB", 0.878, 0.915], ["50k", "jq", 15.014, 17.564],
+    ["500k", "DuckDB", 3.744, 4.083], ["500k", "jq", 149.742, 162.866],
+  ],
+  tune: [
+    ["Full documents, nested updates", 13.65, "The first version"],
+    ["Full documents, one flat table", 59.18, "Joined string keys"],
+    ["Cut to 6 fields first (final)", 5.22, "What the POC uses now"],
+  ],
+  errors: [
+    ["Counterparty not found", 1633], ["Side missing or invalid", 1414], ["Quantity invalid", 1349],
+    ["Trade date invalid", 1001], ["Instrument not found", 986], ["Price invalid", 940],
+    ["Settlement before trade", 586], ["Unknown currency", 549], ["Book not found", 389],
+    ["Previous trade not found", 190],
+  ],
+};
+
+const fmtS = (v) => v >= 60 ? `${Math.floor(v / 60)} min ${Math.round(v % 60)} s` : v >= 10 ? `${v.toFixed(1)} s` : v >= 1 ? `${v.toFixed(2)} s` : `${v.toFixed(2)} s`;
+const fmtN = (v) => Math.round(v).toLocaleString("en-US");
+const fmtSize = (v) => v >= 1e6 ? `${v / 1e6}M` : `${v / 1e3}k`;
+const fmtMB = (v) => v >= 1000 ? `${(v / 1024).toFixed(1)} GB` : `${Math.round(v)} MB`;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const COLORS = { duck: "var(--duck)", jq: "var(--jq)", neutral: "var(--neutral-mark)" };
+const NAMES = { duck: "DuckDB", jq: "jq" };
+
+function scaleOf(axis, r0, r1) {
+  const [d0, d1] = axis.domain;
+  if (axis.type === "log") {
+    const a = Math.log10(d0), b = Math.log10(d1);
+    return (v) => r0 + ((Math.log10(v) - a) / (b - a)) * (r1 - r0);
+  }
+  return (v) => r0 + ((v - d0) / (d1 - d0)) * (r1 - r0);
+}
+
+function lineChart(id, o) {
+  const W = 720, H = 330, m = { t: 18, r: 150, b: 52, l: 70 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const sx = scaleOf(o.x, 0, iw), sy = scaleOf(o.y, ih, 0);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.label)}"><g transform="translate(${m.l},${m.t})">`;
+  for (const t of o.y.ticks) {
+    const y = sy(t);
+    s += `<line class="grid" x1="0" x2="${iw}" y1="${y}" y2="${y}"/><text class="tick" x="-10" y="${y}" dy="0.32em" text-anchor="end">${o.y.fmt(t)}</text>`;
+  }
+  s += `<line class="axis" x1="0" x2="${iw}" y1="${ih}" y2="${ih}"/>`;
+  for (const t of o.x.ticks) {
+    const x = sx(t);
+    s += `<line class="axis" x1="${x}" x2="${x}" y1="${ih}" y2="${ih + 5}"/><text class="tick" x="${x}" y="${ih + 20}" text-anchor="middle">${o.x.fmt(t)}</text>`;
+  }
+  s += `<text class="axis-title" x="${iw / 2}" y="${ih + 44}" text-anchor="middle">${o.x.title}</text>`;
+  s += `<text class="axis-title" transform="translate(-54,${ih / 2}) rotate(-90)" text-anchor="middle">${o.y.title}</text>`;
+  for (const se of o.series) {
+    const pts = se.values.map((v, i) => [sx(o.xs[i]), sy(v)]);
+    s += `<polyline fill="none" stroke="${COLORS[se.key]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${pts.map((p) => p.join(",")).join(" ")}"/>`;
+  }
+  for (const se of o.series) {
+    se.values.forEach((v, i) => {
+      const [x, y] = [sx(o.xs[i]), sy(se.values[i])];
+      const tip = `<b>${NAMES[se.key]} · ${fmtSize(o.xs[i])} trades</b><br>${o.tip(se.key, i)}`;
+      s += `<g tabindex="0" data-tip="${esc(tip)}"><circle cx="${x}" cy="${y}" r="13" fill="transparent"/><circle class="mark-ring" cx="${x}" cy="${y}" r="4.5" fill="${COLORS[se.key]}" stroke="var(--surface)" stroke-width="2"/></g>`;
+    });
+    const last = se.values.length - 1;
+    s += `<text class="end-label" x="${sx(o.xs[last]) + 12}" y="${sy(se.values[last])}" dy="0.32em">${NAMES[se.key]} · ${o.endFmt(se.values[last])}</text>`;
+  }
+  document.getElementById(id).innerHTML = s + "</g></svg>";
+}
+
+function roundedTop(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h);
+  return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
+}
+function roundedRight(x, y, w, h, r) {
+  r = Math.min(r, h / 2, w);
+  return `M${x},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x} Z`;
+}
+
+function groupedBars(id, o) {
+  const W = 720, H = 320, m = { t: 26, r: 16, b: 52, l: 70 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const sy = scaleOf({ domain: [0, o.max] }, ih, 0);
+  const band = iw / o.cats.length, bw = 38, gap = 2;
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.label)}"><g transform="translate(${m.l},${m.t})">`;
+  for (const t of o.ticks) {
+    const y = sy(t);
+    s += `<line class="grid" x1="0" x2="${iw}" y1="${y}" y2="${y}"/><text class="tick" x="-10" y="${y}" dy="0.32em" text-anchor="end">${o.fmt(t)}</text>`;
+  }
+  o.cats.forEach((c, i) => {
+    const x0 = i * band + band / 2 - (o.series.length * bw + (o.series.length - 1) * gap) / 2;
+    o.series.forEach((se, j) => {
+      const v = se.values[i], x = x0 + j * (bw + gap), y = sy(v), h = ih - y;
+      const tip = `<b>${NAMES[se.key]} · ${c} trades</b><br>${o.tip(se.key, i)}`;
+      s += `<g tabindex="0" data-tip="${esc(tip)}"><rect x="${x - 4}" y="${Math.min(y, ih - 24) - 4}" width="${bw + 8}" height="${Math.max(h, 24) + 4}" fill="transparent"/><path d="${roundedTop(x, y, bw, h, 4)}" fill="${COLORS[se.key]}"/></g>`;
+      if (o.labelAt === i) s += `<text class="value" x="${x + bw / 2}" y="${y - 7}" text-anchor="middle">${o.valueFmt(v)}</text>`;
+    });
+    s += `<text class="tick" x="${i * band + band / 2}" y="${ih + 20}" text-anchor="middle">${c}</text>`;
+  });
+  s += `<line class="axis" x1="0" x2="${iw}" y1="${ih}" y2="${ih}"/>`;
+  s += `<text class="axis-title" x="${iw / 2}" y="${ih + 44}" text-anchor="middle">${o.xTitle}</text>`;
+  s += `<text class="axis-title" transform="translate(-54,${ih / 2}) rotate(-90)" text-anchor="middle">${o.yTitle}</text>`;
+  document.getElementById(id).innerHTML = s + "</g></svg>";
+}
+
+function hbars(id, o) {
+  const rowH = o.rowH || 38, barH = 18;
+  const W = o.width || 720, m = { t: 6, r: o.right || 96, b: 30, l: o.labelW || 210 };
+  const iw = W - m.l - m.r, ih = o.rows.length * rowH, H = ih + m.t + m.b;
+  const sx = scaleOf({ domain: [0, o.max] }, 0, iw);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.label)}"><g transform="translate(${m.l},${m.t})">`;
+  for (const t of o.ticks) {
+    const x = sx(t);
+    s += `<line class="grid" x1="${x}" x2="${x}" y1="0" y2="${ih}"/><text class="tick" x="${x}" y="${ih + 18}" text-anchor="middle">${o.tickFmt(t)}</text>`;
+  }
+  o.rows.forEach((r, i) => {
+    const y = i * rowH + (rowH - barH) / 2;
+    s += `<text class="label" x="-12" y="${y + barH / 2}" dy="0.34em" text-anchor="end">${esc(r.label)}</text>`;
+    if (r.value == null) {
+      s += `<text class="label" x="8" y="${y + barH / 2}" dy="0.34em">${esc(r.valueLabel)}</text>`;
+      return;
+    }
+    const w = Math.max(sx(r.value), 2);
+    s += `<g tabindex="0" data-tip="${esc(r.tip)}"><rect x="0" y="${i * rowH}" width="${iw}" height="${rowH}" fill="transparent"/><path d="${roundedRight(0, y, w, barH, 4)}" fill="${COLORS[r.key]}"/></g>`;
+    s += `<text class="value" x="${w + 8}" y="${y + barH / 2}" dy="0.34em">${esc(r.valueLabel)}</text>`;
+  });
+  s += `<line class="axis" x1="0" x2="0" y1="0" y2="${ih}"/>`;
+  document.getElementById(id).innerHTML = s + "</g></svg>";
+}
+
+function table(id, head, rows) {
+  const th = head.map((h, i) => `<th${i ? ' class="n"' : ""}>${h}</th>`).join("");
+  const tb = rows.map((r) => `<tr>${r.map((c, i) => `<td${i ? ' class="n"' : ""}>${c}</td>`).join("")}</tr>`).join("");
+  document.getElementById(id).innerHTML = `<table><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table>`;
+}
+
+/* Benchmark 1 */
+lineChart("c-total", {
+  label: "Line chart of total run time against number of trades on log scales. jq is 7 to 40 times slower than DuckDB at every size.",
+  xs: D.sizes,
+  x: { type: "log", domain: [3800, 1300000], ticks: D.sizes, fmt: fmtSize, title: "Trades in the dataset (log scale)" },
+  y: { type: "log", domain: [0.1, 1000], ticks: [0.1, 1, 10, 100, 1000], fmt: (t) => `${t} s`, title: "Seconds (log scale)" },
+  series: [{ key: "duck", values: D.total.duck }, { key: "jq", values: D.total.jq }],
+  endFmt: fmtS,
+  tip: (k, i) => `Total: ${fmtS(D.total[k][i])}` + (k === "jq" ? `<br>${(D.total.jq[i] / D.total.duck[i]).toFixed(1)}× DuckDB` : ""),
+});
+table("t-total", ["Trades", "DuckDB", "jq", "jq ÷ DuckDB"], D.sizes.map((n, i) => [fmtN(n), fmtS(D.total.duck[i]), fmtS(D.total.jq[i]), `${(D.total.jq[i] / D.total.duck[i]).toFixed(1)}×`]));
+
+/* Benchmark 2 */
+lineChart("c-rate", {
+  label: "Line chart of rows per second. jq stays near 3,000 rows per second; DuckDB rises to about 134,000.",
+  xs: D.sizes,
+  x: { type: "log", domain: [3800, 1300000], ticks: D.sizes, fmt: fmtSize, title: "Trades in the dataset (log scale)" },
+  y: { type: "linear", domain: [0, 150000], ticks: [0, 50000, 100000, 150000], fmt: (t) => t ? `${t / 1000}k` : "0", title: "Rows per second" },
+  series: [{ key: "duck", values: D.rate.duck }, { key: "jq", values: D.rate.jq }],
+  endFmt: (v) => `${fmtN(v)}/s`,
+  tip: (k, i) => `${fmtN(D.rate[k][i])} rows per second<br>Cores used: ${D.cores[k][i].toFixed(2)}`,
+});
+table("t-rate", ["Trades", "DuckDB rows/s", "jq rows/s", "DuckDB cores used", "jq cores used"], D.sizes.map((n, i) => [fmtN(n), fmtN(D.rate.duck[i]), fmtN(D.rate.jq[i]), D.cores.duck[i].toFixed(2), D.cores.jq[i].toFixed(2)]));
+
+/* Benchmark 3 */
+const ratios = D.stages.map((s, i) => D.stage1m.jq[i] / D.stage1m.duck[i]);
+hbars("c-ratio", {
+  label: "Bar chart of how many times longer jq takes per stage at 1 million trades. Validate is the largest gap at 288 times.",
+  max: 300, ticks: [0, 100, 200, 300], tickFmt: (t) => `${t}×`, labelW: 110,
+  rows: D.stages.map((s, i) => ({
+    label: s, value: ratios[i], key: "jq", valueLabel: `${ratios[i].toFixed(0)}×`,
+    tip: `<b>${s}</b><br>DuckDB ${fmtS(D.stage1m.duck[i])} · jq ${fmtS(D.stage1m.jq[i])}<br>jq takes ${ratios[i].toFixed(1)}× longer`,
+  })),
+});
+table("t-stage", ["Stage", "DuckDB", "jq", "jq ÷ DuckDB"], D.stages.map((s, i) => [s, fmtS(D.stage1m.duck[i]), fmtS(D.stage1m.jq[i]), `${ratios[i].toFixed(1)}×`]));
+for (const k of ["duck", "jq"]) {
+  const total = D.stage1m[k].reduce((a, b) => a + b, 0);
+  hbars(`c-share-${k}`, {
+    label: `Share of ${NAMES[k]} time per stage at 1 million trades`,
+    width: 460, labelW: 90, right: 120, rowH: 34, max: 100, ticks: [0, 50, 100], tickFmt: (t) => `${t}%`,
+    rows: D.stages.map((s, i) => {
+      const pct = (D.stage1m[k][i] / total) * 100;
+      return { label: s, value: pct, key: k, valueLabel: `${pct.toFixed(0)}% · ${fmtS(D.stage1m[k][i])}`, tip: `<b>${NAMES[k]} · ${s}</b><br>${fmtS(D.stage1m[k][i])} (${pct.toFixed(1)}% of ${fmtS(total)})` };
+    }),
+  });
+}
+
+/* Benchmark 4 */
+groupedBars("c-mem", {
+  label: "Grouped bar chart of peak memory. jq stays under 650 MB; DuckDB reaches 2.6 GB at 1 million trades.",
+  cats: D.sizes.map(fmtSize), max: 3000, ticks: [0, 1000, 2000, 3000], fmt: (t) => t ? `${t / 1000}k` : "0",
+  series: [{ key: "duck", values: D.mem.duck }, { key: "jq", values: D.mem.jq }],
+  labelAt: 3, valueFmt: fmtMB, xTitle: "Trades in the dataset", yTitle: "Peak memory (MB)",
+  tip: (k, i) => `Peak memory: ${fmtMB(D.mem[k][i])}`,
+});
+table("t-mem", ["Trades", "DuckDB", "jq", "DuckDB ÷ jq"], D.sizes.map((n, i) => [fmtN(n), fmtMB(D.mem.duck[i]), fmtMB(D.mem.jq[i]), `${(D.mem.duck[i] / D.mem.jq[i]).toFixed(1)}×`]));
+
+/* Benchmark 5 */
+hbars("c-thread", {
+  label: "Bar chart of total time at 1 million trades: DuckDB on all cores 11 seconds, DuckDB on one core 15.6 seconds, jq 314 seconds.",
+  max: 350, ticks: [0, 100, 200, 300], tickFmt: (t) => `${t} s`, labelW: 170, right: 110,
+  rows: D.thread.map(([label, v, key]) => ({ label, value: v, key, valueLabel: fmtS(v), tip: `<b>${label}</b><br>${fmtS(v)} for 1M trades` + (key === "jq" ? "" : `<br>jq takes ${(313.937 / v).toFixed(1)}× longer`) })),
+});
+table("t-thread", ["Setup", "Total", "Cores used", "Peak memory"], [["DuckDB, all cores", "11.0 s", "2.51", "2.5 GB"], ["DuckDB, 1 core", "15.6 s", "0.91", "1.8 GB"], ["jq", "5 min 14 s", "1.04", "632 MB"]]);
+
+/* Benchmark 6 */
+for (const k of ["duck", "jq"]) {
+  const vals = D.stress[`${k}T`], max = k === "duck" ? 2 : 15;
+  hbars(`c-stress-${k}`, {
+    label: `${NAMES[k]} transform time for normal, deep and long-chain data`,
+    width: 460, labelW: 130, right: 92, rowH: 36, max, ticks: k === "duck" ? [0, 1, 2] : [0, 5, 10, 15], tickFmt: (t) => `${t} s`,
+    rows: D.stress.labels.map((l, i) => ({ label: l, value: vals[i], key: k, valueLabel: fmtS(vals[i]) + (i ? ` · ${(vals[i] / vals[0]).toFixed(1)}×` : ""), tip: `<b>${NAMES[k]} · ${l}</b><br>Transform: ${fmtS(vals[i])}<br>Whole run: ${fmtS(D.stress[`${k}Total`][i])}<br>Peak memory: ${fmtMB(D.stress[`${k}Mem`][i])}` })),
+  });
+}
+table("t-stress", ["Data", "DuckDB transform", "jq transform", "DuckDB total", "jq total", "DuckDB memory", "jq memory"], D.stress.labels.map((l, i) => [l, fmtS(D.stress.duckT[i]), fmtS(D.stress.jqT[i]), fmtS(D.stress.duckTotal[i]), fmtS(D.stress.jqTotal[i]), fmtMB(D.stress.duckMem[i]), fmtMB(D.stress.jqMem[i])]));
+
+/* Benchmark 7 */
+table("t-format", ["Engine (500k trades)", "Ingest, Parquet", "Ingest, CSV", "Total, Parquet", "Total, CSV"], D.format.rows.map(([e, a, b, c, d]) => [e, fmtS(a), fmtS(b), fmtS(c), fmtS(d)]));
+
+/* Benchmark 8 */
+table("t-repeat", ["Size", "Engine", "First run", "Second run", "Difference"], D.repeat.map(([s, e, a, b]) => [s, e, fmtS(a), fmtS(b), `${(((b - a) / a) * 100).toFixed(0) > 0 ? "+" : ""}${(((b - a) / a) * 100).toFixed(0)}%`]));
+
+/* Benchmark 9 */
+hbars("c-tune", {
+  label: "Bar chart of three jq versions of the same aggregation on 100,000 documents: 13.7, 59.2 and 5.2 seconds.",
+  max: 60, ticks: [0, 20, 40, 60], tickFmt: (t) => `${t} s`, labelW: 230, right: 80,
+  rows: D.tune.map(([label, v, note]) => ({ label, value: v, key: "jq", valueLabel: fmtS(v), tip: `<b>${label}</b><br>${note}<br>${fmtS(v)} for 100,000 documents` })),
+});
+table("t-tune", ["Version", "Time (100k docs)", "Compared with final"], D.tune.map(([l, v]) => [l, fmtS(v), `${(v / 5.22).toFixed(1)}×`]));
+
+/* Benchmark 10 */
+hbars("c-errors", {
+  label: "Bar chart of rejection reasons at 1 million trades. Counterparty not found is the most common at 1,633.",
+  max: 1800, ticks: [0, 500, 1000, 1500], tickFmt: (t) => fmtN(t), labelW: 190, right: 70, rowH: 30,
+  rows: D.errors.map(([label, v]) => ({ label, value: v, key: "neutral", valueLabel: fmtN(v), tip: `<b>${label}</b><br>${fmtN(v)} trades (same in both engines)` })),
+});
+
+/* Benchmark 11 */
+const memFix = [
+  // label, peak MB, seconds, recommended, note
+  ["Default", 3200, 6.28, false, "Repeat run: 3.6 GB, 6.7 s"],
+  ["2 threads", 2612, 6.37, false, ""],
+  ["Unordered", 3029, 5.49, false, ""],
+  ["On-disk database", 3405, 13.66, false, ""],
+  ["1 GB limit only", null, null, false, "Failed: Out of Memory in transform"],
+  ["Lean", 1423, 7.89, false, ""],
+  ["Lean + unordered", 1417, 3.21, true, ""],
+  ["Lean + unordered + 1 GB", 1264, 3.78, true, "Repeat run: 1.2 GB, 4.2 s"],
+  ["Lean + unordered + 512 MB + disk", 752, 7.93, true, ""],
+];
+const fixRow = (valueOf, fmt) => memFix.map(([label, mb, sec, rec, note]) => {
+  const v = valueOf(mb, sec);
+  return {
+    label, value: v, key: rec ? "duck" : "neutral",
+    valueLabel: v == null ? "failed (out of memory)" : fmt(v),
+    tip: `<b>${label}</b><br>` + (mb == null ? note : `Peak memory ${fmtMB(mb)} · total ${fmtS(sec)}` + (note ? `<br>${note}` : "")),
+  };
+});
+hbars("c-mem-fix", {
+  label: "Peak memory per DuckDB setting at 1 million trades. Lean plus unordered plus 512 MB plus disk is lowest at 752 MB.",
+  width: 500, labelW: 210, right: 70, rowH: 32, max: 4000, ticks: [0, 2000, 4000], tickFmt: (t) => t ? `${t / 1000} GB` : "0",
+  rows: fixRow((mb) => mb, fmtMB),
+});
+hbars("c-time-fix", {
+  label: "Total time per DuckDB setting at 1 million trades. Lean plus unordered is fastest at 3.2 seconds.",
+  width: 500, labelW: 210, right: 70, rowH: 32, max: 15, ticks: [0, 5, 10, 15], tickFmt: (t) => `${t} s`,
+  rows: fixRow((mb, sec) => sec, fmtS),
+});
+table("t-mem-fix", ["Setting", "Peak memory", "Total time", "Note"], memFix.map(([l, mb, sec, , note]) => [l, mb == null ? "-" : fmtMB(mb), sec == null ? "failed" : fmtS(sec), note || "-"]));
+
+/* Contents rail: mark the section currently in view */
+const railLinks = [...document.querySelectorAll(".rail a")];
+const railTargets = new Map(railLinks.map((a) => [a.getAttribute("href").slice(1), a]));
+const spy = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    railLinks.forEach((a) => a.removeAttribute("aria-current"));
+    railTargets.get(entry.target.id)?.setAttribute("aria-current", "true");
+  }
+}, { rootMargin: "0px 0px -75% 0px" });
+railTargets.forEach((_, id) => { const el = document.getElementById(id); if (el) spy.observe(el); });
+
+/* Tooltip: pointer and keyboard */
+const tipEl = document.getElementById("tip");
+function place(x, y) {
+  const r = tipEl.getBoundingClientRect();
+  let left = x + 14, top = y + 14;
+  if (left + r.width > innerWidth - 8) left = x - r.width - 14;
+  if (top + r.height > innerHeight - 8) top = y - r.height - 14;
+  tipEl.style.left = `${Math.max(8, left)}px`;
+  tipEl.style.top = `${Math.max(8, top)}px`;
+}
+function show(target) { tipEl.innerHTML = target.getAttribute("data-tip"); tipEl.hidden = false; }
+document.addEventListener("pointerover", (e) => { const t = e.target.closest("[data-tip]"); if (t) { show(t); place(e.clientX, e.clientY); } });
+document.addEventListener("pointermove", (e) => { if (!tipEl.hidden && e.target.closest("[data-tip]")) place(e.clientX, e.clientY); });
+document.addEventListener("pointerout", (e) => { if (e.target.closest("[data-tip]")) tipEl.hidden = true; });
+document.addEventListener("focusin", (e) => { const t = e.target.closest("[data-tip]"); if (t) { show(t); const b = t.getBoundingClientRect(); place(b.right, b.top); } });
+document.addEventListener("focusout", () => { tipEl.hidden = true; });
+</script>
+
+</html>
