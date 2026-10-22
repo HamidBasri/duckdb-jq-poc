@@ -6,7 +6,7 @@ between its entities, and maps it to a **nested JSON** schema. It does all of th
 once with **DuckDB** and once with **jq**, then proves the two outputs are equivalent and
 reports how long each stage took, how much memory it used, and how many cores it kept busy.
 
-**Full illustrated report:** [docs/benchmark-report.html](docs/benchmark-report.html), with every benchmark explained in plain language, charts, service and dataflow diagrams, DuckDB memory fixes and alternatives. Open it in a browser.
+**Full illustrated report:** [hamidbasri.github.io/duckdb-jq-poc](https://hamidbasri.github.io/duckdb-jq-poc/) (source: [docs/benchmark-report.html](docs/benchmark-report.html)), with every benchmark explained in plain language, charts, service and dataflow diagrams, DuckDB memory fixes and alternatives. 
 
 ## Results at a glance
 
