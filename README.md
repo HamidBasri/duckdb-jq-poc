@@ -5,6 +5,7 @@ nested JSON: DuckDB or jq. So I built the same pipeline twice, ran both on the s
 thousand to 1 million rows, and checked that they produce exactly the same output.
 
 **Report:** [hamidbasri.github.io/duckdb-jq-poc](https://hamidbasri.github.io/duckdb-jq-poc/)
+
 **How it's built:** [architecture in ten minutes](https://hamidbasri.github.io/duckdb-jq-poc/architecture.html)
 
 ## Results

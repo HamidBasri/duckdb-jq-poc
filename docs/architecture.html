@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trade Pipeline Architecture</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: dark hero, sticky three-part nav (Code, Design, Concepts), one reading column.
+   Same palette as the benchmark report so the two pages read as a set. Blue = DuckDB, orange = jq. */
+:root {
+  --page: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --ink: #0d1321;
+  --ink-2: #434c5b;
+  --ink-3: #6b7480;
+  --line: #e3e7ec;
+  --line-strong: #c3cad3;
+  --hero: #0d1321;
+  --hero-ink: #ffffff;
+  --hero-2: #a9b4c4;
+  --hero-line: rgb(255 255 255 / 0.14);
+  --duck: #2a78d6;
+  --duck-soft: #e8f1fb;
+  --jq: #eb6834;
+  --jq-soft: #fdeee7;
+  --lane: #f3f5f8;
+  --good: #17784a;
+  --bad: #b8392b;
+  --font-sans: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0b0f16; --surface: #111722; --surface-2: #171f2c; --ink: #e8ecf2; --ink-2: #b4bdc9; --ink-3: #8893a2;
+    --line: #222b38; --line-strong: #3a4657; --hero: #121a27; --hero-ink: #ffffff; --hero-2: #a9b4c4;
+    --hero-line: rgb(255 255 255 / 0.12); --duck: #4b93ea; --duck-soft: #14253b; --jq: #f07a48; --jq-soft: #33201a;
+    --lane: #0f141d; --good: #4cc38a; --bad: #e5675a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0b0f16; --surface: #111722; --surface-2: #171f2c; --ink: #e8ecf2; --ink-2: #b4bdc9; --ink-3: #8893a2;
+  --line: #222b38; --line-strong: #3a4657; --hero: #121a27; --hero-ink: #ffffff; --hero-2: #a9b4c4;
+  --hero-line: rgb(255 255 255 / 0.12); --duck: #4b93ea; --duck-soft: #14253b; --jq: #f07a48; --jq-soft: #33201a;
+  --lane: #0f141d; --good: #4cc38a; --bad: #e5675a;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-sans);
+  font-size: 16px; line-height: 1.6; overflow-x: clip;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--hero); }
+.wrap {
+  max-width: 920px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; overflow-wrap: anywhere; }
+a { color: var(--duck); }
+:focus-visible { outline: 2px solid var(--duck); outline-offset: 2px; border-radius: 4px; }
+
+/* hero */
+.hero { background: var(--hero); color: var(--hero-ink); }
+.hero .wrap { padding-block: 56px 44px; display: grid; gap: 18px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--hero-2); }
+.hero h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.1rem); line-height: 1.08; letter-spacing: -0.02em; text-wrap: balance; max-width: 18ch; }
+.hero p { margin: 0; color: var(--hero-2); font-size: 1.08rem; max-width: 60ch; }
+.parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 12px; margin-top: 10px; }
+.part {
+  display: grid; gap: 4px; padding: 16px 18px; border: 1px solid var(--hero-line); border-radius: 10px;
+  color: var(--hero-ink); text-decoration: none; transition: border-color 0.15s, background 0.15s;
+}
+.part:hover { border-color: var(--hero-2); background: rgb(255 255 255 / 0.04); }
+.part b { font-size: 1.05rem; }
+.part span { color: var(--hero-2); font-size: 0.92rem; line-height: 1.45; }
+.part i { font-style: normal; font-family: var(--font-mono); font-size: 0.72rem; color: var(--hero-2); letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* nav */
+nav.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+nav.top .wrap { display: flex; gap: 6px; padding-block: 10px; overflow-x: auto; scrollbar-width: none; }
+nav.top a {
+  flex: none; padding: 6px 14px; border-radius: 999px; color: var(--ink-2); text-decoration: none;
+  font-size: 0.92rem; font-weight: 500;
+}
+nav.top a:hover { background: var(--surface-2); color: var(--ink); }
+nav.top a.on { background: var(--ink); color: var(--page); }
+
+/* sections */
+section.part-body { padding-block: 56px 8px; }
+section.part-body + section.part-body { border-top: 1px solid var(--line); }
+.kicker { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+h2 { margin: 6px 0 10px; font-size: clamp(1.6rem, 3.6vw, 2.1rem); letter-spacing: -0.015em; line-height: 1.15; text-wrap: balance; }
+h3 { margin: 40px 0 8px; font-size: 1.15rem; letter-spacing: -0.005em; text-wrap: balance; }
+.lead { font-size: 1.08rem; color: var(--ink-2); max-width: 62ch; margin: 0; }
+p { max-width: 66ch; }
+.muted { color: var(--ink-3); }
+
+.takeaway {
+  margin: 22px 0 0; padding: 14px 18px; border-radius: 10px; background: var(--duck-soft); color: var(--ink);
+  max-width: 66ch; font-size: 0.98rem;
+}
+.takeaway b { color: var(--duck); }
+
+/* layers */
+.layers { display: grid; gap: 18px; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: start; margin-top: 26px; }
+@media (max-width: 760px) { .layers { grid-template-columns: minmax(0, 1fr); } }
+.ring { border: 1.5px solid var(--line-strong); border-radius: 14px; padding: 12px 12px 14px; background: var(--surface); }
+.ring > .ring-label { font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; display: block; margin: 0 4px 10px; }
+.ring .ring { background: var(--surface-2); }
+.ring .ring .ring { background: var(--hero); border-color: var(--hero); color: var(--hero-ink); }
+.ring .ring .ring > .ring-label { color: var(--hero-2); }
+.ring .ring .ring b { font-size: 1.1rem; }
+.ring .ring .ring p { margin: 2px 4px 0; color: var(--hero-2); font-size: 0.9rem; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 4px 0; }
+.tag { font-family: var(--font-mono); font-size: 0.78rem; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--ink-2); background: var(--surface); }
+.rule { display: grid; gap: 12px; }
+.rule .item { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; }
+.rule .dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 0.8rem; font-weight: 700; }
+.dot.yes { background: var(--duck-soft); color: var(--duck); }
+.dot.no { background: var(--jq-soft); color: var(--jq); }
+.rule p { margin: 0; font-size: 0.96rem; }
+
+/* folder table */
+.table-wrap { overflow-x: auto; margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.94rem; }
+th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 0.76rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; background: var(--surface-2); }
+td:first-child { white-space: nowrap; }
+td .mono { color: var(--ink); }
+
+/* diagram */
+.diagram { margin-top: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow-x: auto; }
+.diagram svg { display: block; width: 100%; min-width: 720px; height: auto; }
+svg .lane { fill: var(--lane); stroke: var(--line); }
+svg .lane-label { fill: var(--ink-3); font: 500 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+svg .box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+svg .box.key { fill: var(--hero); stroke: var(--hero); }
+svg .box.duck { fill: var(--duck-soft); stroke: var(--duck); }
+svg .t { fill: var(--ink); font: 600 13px var(--font-sans); }
+svg .s { fill: var(--ink-3); font: 400 11px var(--font-sans); }
+svg .key-t { fill: var(--hero-ink); font: 600 13px var(--font-sans); }
+svg .key-s { fill: var(--hero-2); font: 400 11px var(--font-sans); }
+svg .bus { fill: var(--duck); }
+svg .bus-t { fill: #ffffff; font: 600 12px var(--font-mono); letter-spacing: 0.06em; }
+svg .arrow { stroke: var(--ink-2); stroke-width: 1.4; fill: none; }
+svg .arrow.back { stroke: var(--duck); stroke-dasharray: 5 4; }
+svg .arrow-head { fill: var(--ink-2); }
+svg .arrow-head.back { fill: var(--duck); }
+svg .num { fill: var(--jq); }
+svg .num-t { fill: #ffffff; font: 700 11px var(--font-sans); }
+svg .edge { fill: var(--ink-3); font: 400 11px var(--font-sans); }
+
+/* steps */
+ol.steps { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 10px; counter-reset: s; }
+ol.steps li {
+  counter-increment: s; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px;
+  padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+}
+ol.steps li::before {
+  content: counter(s); width: 26px; height: 26px; border-radius: 50%; background: var(--jq); color: #ffffff;
+  display: grid; place-items: center; font-size: 0.8rem; font-weight: 700; margin-top: 1px;
+}
+ol.steps b { display: block; }
+ol.steps span { color: var(--ink-2); font-size: 0.95rem; }
+
+/* stages */
+.stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 18px; }
+@media (max-width: 760px) { .stages { grid-template-columns: minmax(0, 1fr); } }
+.stage { padding: 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); display: grid; gap: 4px; align-content: start; }
+.stage i { font-style: normal; font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-3); }
+.stage b { font-size: 1rem; }
+.stage span { font-size: 0.88rem; color: var(--ink-2); line-height: 1.45; }
+
+/* engines side by side */
+.engines { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 12px; margin-top: 16px; }
+.engine { padding: 16px 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+.engine h4 { margin: 0 0 6px; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+.engine h4::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.engine p { margin: 0; color: var(--ink-2); font-size: 0.94rem; }
+.engine.duck { --c: var(--duck); }
+.engine.jq { --c: var(--jq); }
+
+/* patterns */
+.patterns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 10px; margin-top: 18px; }
+.pattern { padding: 14px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); display: grid; gap: 6px; align-content: start; }
+.pattern b { font-size: 1rem; }
+.pattern .where { font-family: var(--font-mono); font-size: 0.78rem; color: var(--duck); overflow-wrap: anywhere; }
+.pattern span { color: var(--ink-2); font-size: 0.92rem; line-height: 1.5; }
+
+/* glossary */
+.glossary { margin: 18px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 0 28px; }
+.glossary div { padding: 12px 0; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+.glossary dt { font-weight: 600; }
+.glossary dd { margin: 0; color: var(--ink-2); font-size: 0.95rem; }
+.glossary dd code { font-size: 0.8em; }
+
+/* reading order */
+ol.read { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: hidden; }
+ol.read li { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: 14px; padding: 11px 16px; border-bottom: 1px solid var(--line); }
+ol.read li:last-child { border-bottom: 0; }
+ol.read .mono { color: var(--ink); overflow-wrap: anywhere; }
+ol.read span:last-child { color: var(--ink-2); font-size: 0.94rem; }
+@media (max-width: 560px) { ol.read li { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+footer { padding-block: 48px 64px; color: var(--ink-3); font-size: 0.9rem; }
+</style>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">DuckDB vs jq · how it is built</span>
+    <h1>The trade pipeline in ten minutes</h1>
+    <p>The app takes messy trade files, cleans and checks them, and writes each trade as nested JSON. It does this twice, once with DuckDB and once with jq, and compares the two. This page explains it in three parts, from the folders up to the ideas.</p>
+    <div class="parts">
+      <a class="part" href="#code"><i>Part 1</i><b>The code</b><span>Where things live and which part may talk to which.</span></a>
+      <a class="part" href="#design"><i>Part 2</i><b>The design</b><span>What happens, step by step, when you start a run.</span></a>
+      <a class="part" href="#concepts"><i>Part 3</i><b>The concepts</b><span>The words you need: run, stage, reject, exposure and more.</span></a>
+    </div>
+  </div>
+</header>
+
+<nav class="top" aria-label="Parts">
+  <div class="wrap">
+    <a href="#code">1 · Code</a>
+    <a href="#design">2 · Design</a>
+    <a href="#concepts">3 · Concepts</a>
+    <a href="#start">Where to start reading</a>
+  </div>
+</nav>
+
+<main>
+  <!-- PART 1 -->
+  <section class="part-body" id="code">
+    <div class="wrap">
+      <span class="kicker">Part 1 · The code</span>
+      <h2>Three rings, one rule</h2>
+      <p class="lead">The code is split into rings. The middle holds the plain business ideas. The outside holds everything that touches the real world: HTTP, files, processes, DuckDB and jq.</p>
+
+      <div class="layers">
+        <div class="ring">
+          <span class="ring-label">Outer ring · the real world</span>
+          <div class="ring">
+            <span class="ring-label">application · the steps</span>
+            <div class="ring">
+              <span class="ring-label">domain · the ideas</span>
+              <b>Trades, runs, events, rules</b>
+              <p>Plain data and interfaces. No database, no web, no files.</p>
+            </div>
+            <div class="tags"><span class="tag">services</span><span class="tag">orchestrators</span><span class="tag">pipeline runner</span><span class="tag">verification</span><span class="tag">row tracking</span></div>
+          </div>
+          <div class="tags"><span class="tag">api</span><span class="tag">engines</span><span class="tag">infrastructure</span><span class="tag">bootstrap.py</span></div>
+        </div>
+
+        <div class="rule">
+          <div class="item"><span class="dot yes" aria-hidden="true">✓</span><p><b>Outer code may use inner code.</b> The API calls services. The DuckDB engine uses domain models.</p></div>
+          <div class="item"><span class="dot no" aria-hidden="true">✕</span><p><b>Inner code never imports outer code.</b> A service does not know DuckDB or FastAPI exist. It only knows the interfaces in <code>domain/ports.py</code>.</p></div>
+          <div class="item"><span class="dot yes" aria-hidden="true">✓</span><p><b>One file connects everything.</b> <code>bootstrap.py</code> creates the real objects and plugs them into each other. It is the only file that knows every class.</p></div>
+          <div class="item"><span class="dot yes" aria-hidden="true">✓</span><p><b>Why bother?</b> You can swap or test any outer part alone. Adding a third engine means one new folder and a couple of lines to register it.</p></div>
+        </div>
+      </div>
+
+      <h3>The folders</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Folder</th><th>What lives here</th><th>Think of it as</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">app/domain</td><td>Records (dataset, run, comparison), events, the 13 rules and 5 warnings, and the interfaces other parts must follow.</td><td>The dictionary</td></tr>
+            <tr><td class="mono">app/application</td><td>Use cases. Services accept requests, orchestrators run the work, the runner drives the five stages, the checker compares outputs.</td><td>The manager</td></tr>
+            <tr><td class="mono">app/engines</td><td>The two ways to do the same job: SQL files for DuckDB, <code>.jq</code> programs for jq.</td><td>The two workers</td></tr>
+            <tr><td class="mono">app/infrastructure</td><td>Data generator, worker processes, JSON file storage, memory monitor, row tracker, live event stream.</td><td>The tools and the building</td></tr>
+            <tr><td class="mono">app/api</td><td>FastAPI routes plus two pages: the dashboard and the trade tracker.</td><td>The front desk</td></tr>
+            <tr><td class="mono">app/bootstrap.py</td><td>Builds every object and wires them together at startup.</td><td>The switchboard</td></tr>
+            <tr><td class="mono">tests</td><td>Parity tests (both engines give the same answer), edge cases, API and tracking tests.</td><td>The inspector</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="takeaway"><b>Remember:</b> ideas in the middle, tools on the outside, and dependencies only point inward.</p>
+    </div>
+  </section>
+
+  <!-- PART 2 -->
+  <section class="part-body" id="design">
+    <div class="wrap">
+      <span class="kicker">Part 2 · The design</span>
+      <h2>Ask, announce, work in the background</h2>
+      <p class="lead">Nothing heavy happens inside a web request. The request saves a record, announces an event, and returns at once. Other parts hear the event and do the work in separate processes.</p>
+
+      <div class="diagram" role="img" aria-label="Flow of a run: browser to API to service, service publishes an event on the event bus, the orchestrator hears it and sends the job to a worker process, the worker runs the engine through five stages and sends stage events back to the bus, and the bus updates saved state and the live stream to the browser.">
+        <svg viewBox="0 0 800 410" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow-head" d="M0 0 L10 5 L0 10 z"/></marker>
+            <marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow-head back" d="M0 0 L10 5 L0 10 z"/></marker>
+          </defs>
+          <rect class="lane" x="8" y="8" width="784" height="282" rx="10"/>
+          <text class="lane-label" x="22" y="28">Web process · FastAPI, one event loop</text>
+          <rect class="lane" x="8" y="300" width="784" height="102" rx="10"/>
+          <text class="lane-label" x="22" y="320">Worker process · a fresh one for every run</text>
+
+          <rect class="box" x="22" y="48" width="120" height="54" rx="8"/>
+          <text class="t" x="34" y="71">Browser</text><text class="s" x="34" y="89">dashboard, tracker</text>
+          <rect class="box" x="182" y="48" width="120" height="54" rx="8"/>
+          <text class="t" x="194" y="71">API route</text><text class="s" x="194" y="89">checks the input</text>
+          <rect class="box" x="342" y="48" width="130" height="54" rx="8"/>
+          <text class="t" x="354" y="71">Service</text><text class="s" x="354" y="89">saves a record</text>
+          <rect class="box key" x="600" y="48" width="170" height="54" rx="8"/>
+          <text class="key-t" x="612" y="71">Orchestrator</text><text class="key-s" x="612" y="89">hears it, sends the job</text>
+
+          <path class="arrow" d="M142 75 H178" marker-end="url(#ah)"/>
+          <path class="arrow" d="M302 75 H338" marker-end="url(#ah)"/>
+          <path class="arrow" d="M407 102 V146" marker-end="url(#ah)"/>
+          <text class="edge" x="414" y="130">announces "ComparisonRequested"</text>
+          <path class="arrow" d="M640 148 V106" marker-end="url(#ah)"/>
+
+          <rect class="bus" x="182" y="150" width="500" height="34" rx="6"/>
+          <text class="bus-t" x="196" y="172">EVENT BUS · everyone who cares hears every event</text>
+
+          <rect class="box" x="182" y="222" width="130" height="54" rx="8"/>
+          <text class="t" x="194" y="245">Live stream</text><text class="s" x="194" y="263">pushes to the page</text>
+          <rect class="box" x="342" y="222" width="130" height="54" rx="8"/>
+          <text class="t" x="354" y="245">State projector</text><text class="s" x="354" y="263">updates JSON files</text>
+          <path class="arrow" d="M247 184 V218" marker-end="url(#ah)"/>
+          <path class="arrow" d="M407 184 V218" marker-end="url(#ah)"/>
+          <path class="arrow" d="M182 249 H82 V106" marker-end="url(#ah)"/>
+
+          <path class="arrow" d="M730 102 V336" marker-end="url(#ah)"/>
+          <text class="edge" x="738" y="230">job</text>
+
+          <rect class="box key" x="600" y="340" width="170" height="50" rx="8"/>
+          <text class="key-t" x="612" y="361">Pipeline runner</text><text class="key-s" x="612" y="378">times every stage</text>
+          <rect class="box duck" x="400" y="340" width="160" height="50" rx="8"/>
+          <text class="t" x="412" y="361">Engine</text><text class="s" x="412" y="378">DuckDB or jq, 5 stages</text>
+          <rect class="box" x="210" y="340" width="150" height="50" rx="8"/>
+          <text class="t" x="222" y="361">Row tracker</text><text class="s" x="222" y="378">where each row went</text>
+          <path class="arrow" d="M600 365 H564" marker-end="url(#ah)"/>
+          <path class="arrow" d="M400 365 H364" marker-end="url(#ah)"/>
+          <text class="edge" x="368" y="356">then</text>
+
+          <path class="arrow back" d="M520 340 V188" marker-end="url(#ahb)"/>
+          <text class="edge" x="528" y="270">stage started,</text>
+          <text class="edge" x="528" y="284">stage done</text>
+        </svg>
+      </div>
+
+      <h3>One run, step by step</h3>
+      <ol class="steps">
+        <li><div><b>You ask</b><span>The browser sends <code>POST /api/comparisons</code> with a dataset and the engines to use.</span></div></li>
+        <li><div><b>The service records it</b><span>It checks the dataset exists, saves a comparison and one run per engine with status "queued", publishes <code>ComparisonRequested</code>, and answers right away.</span></div></li>
+        <li><div><b>The orchestrator picks it up</b><span>It hears the event and sends each run to the worker pool. Two jobs can run at once. Each run gets a brand new process, so memory numbers stay clean.</span></div></li>
+        <li><div><b>The runner drives the engine</b><span>Inside the worker, the pipeline runner calls the five stages in order and measures time, CPU and memory for each one.</span></div></li>
+        <li><div><b>Progress flows back</b><span>Each stage sends "started" and "done" events through a queue back to the event bus. The projector saves them, and the live stream shows them in your browser.</span></div></li>
+        <li><div><b>The checker compares</b><span>When both engines finish, a separate job matches their outputs document by document and stores the verdict.</span></div></li>
+        <li><div><b>The row tracker explains</b><span>For every input row it records the outcome: delivered, rejected, duplicate or filtered out. The tracker page reads this.</span></div></li>
+      </ol>
+
+      <h3>The five stages</h3>
+      <p>Both engines do exactly these steps, with the same rules and the same output.</p>
+      <div class="stages">
+        <div class="stage"><i>1</i><b>Ingest</b><span>Read the five tables from CSV or Parquet.</span></div>
+        <div class="stage"><i>2</i><b>Clean</b><span>Trim text, parse dates and numbers, remove duplicates, fill safe gaps.</span></div>
+        <div class="stage"><i>3</i><b>Validate</b><span>Check 13 rules. A trade that breaks any rule is rejected with its reasons.</span></div>
+        <div class="stage"><i>4</i><b>Transform</b><span>Follow every link and write each trade as one nested JSON document.</span></div>
+        <div class="stage"><i>5</i><b>Aggregate</b><span>Add up the exposure for each parent company.</span></div>
+      </div>
+
+      <div class="engines">
+        <div class="engine duck"><h4>DuckDB engine</h4><p>Each stage is a SQL file. One query handles the whole table at once, spread over all CPU cores. Parent chains use a recursive query.</p></div>
+        <div class="engine jq"><h4>jq engine</h4><p>Each stage is a few <code>.jq</code> programs. jq reads NDJSON one line at a time and makes several passes, building small lookup files between them. DuckDB converts the input to NDJSON first, because jq cannot read CSV or Parquet.</p></div>
+      </div>
+
+      <h3>The patterns, in one line each</h3>
+      <div class="patterns">
+        <div class="pattern"><b>Strategy</b><span class="where">engines/duckdb_engine, engines/jq_engine</span><span>Two engines with the same five methods. The rest of the app does not care which one runs.</span></div>
+        <div class="pattern"><b>Template method</b><span class="where">application/pipeline.py</span><span>The runner fixes the order and the timing. Only the stage work changes per engine.</span></div>
+        <div class="pattern"><b>Factory</b><span class="where">engines/__init__.py</span><span>Give it "duckdb" or "jq" and it hands back the right engine.</span></div>
+        <div class="pattern"><b>Ports and adapters</b><span class="where">domain/ports.py</span><span>Inner code asks for an interface. Outer code provides the real thing.</span></div>
+        <div class="pattern"><b>Event bus</b><span class="where">application/messaging.py</span><span>Parts talk by announcing events, so the sender never waits for or knows the listener.</span></div>
+        <div class="pattern"><b>Projection</b><span class="where">application/projections.py</span><span>One listener turns events into the saved state of runs and comparisons. State always follows the events.</span></div>
+        <div class="pattern"><b>Repository</b><span class="where">infrastructure/repositories.py</span><span>Save and load records as JSON files, kept in memory for fast reads.</span></div>
+        <div class="pattern"><b>Process pool</b><span class="where">infrastructure/workers.py</span><span>Heavy work runs in other processes, so the web server stays fast and one crash stays contained.</span></div>
+        <div class="pattern"><b>Composition root</b><span class="where">app/bootstrap.py</span><span>Everything is created and connected in one place, at startup.</span></div>
+      </div>
+      <p class="takeaway"><b>Remember:</b> requests only record and announce. Orchestrators do the work in worker processes, and events carry progress back.</p>
+    </div>
+  </section>
+
+  <!-- PART 3 -->
+  <section class="part-body" id="concepts">
+    <div class="wrap">
+      <span class="kicker">Part 3 · The concepts</span>
+      <h2>The words you will see</h2>
+      <p class="lead">Two groups: the trade data the pipeline works on, and the moving parts of the app.</p>
+
+      <h3>The trade data</h3>
+      <dl class="glossary">
+        <div><dt>Trade</dt><dd>One buy or sell of an instrument, by a book, with a counterparty, at a price and quantity.</dd></div>
+        <div><dt>Five tables</dt><dd>Trades, plus four lookup tables: counterparties, instruments, books and FX rates.</dd></div>
+        <div><dt>Amendment chain</dt><dd>A trade can point back to an earlier version of itself. The pipeline follows the chain and gives each one a version number.</dd></div>
+        <div><dt>Counterparty tree</dt><dd>Companies have parents, up to seven levels deep. Some trees loop by mistake, and the pipeline has to stop safely.</dd></div>
+        <div><dt>Ultimate parent</dt><dd>The top company of a tree. Exposure is grouped by it.</dd></div>
+        <div><dt>Exposure</dt><dd>Total value at risk with one parent company, in US dollars, counting only the latest version of each live trade.</dd></div>
+        <div><dt>Reject</dt><dd>A trade that broke at least one of the 13 rules. It goes to the rejects file with codes like <code>E_PRICE_INVALID</code>.</dd></div>
+        <div><dt>Warning</dt><dd>A problem the pipeline could fix or live with, such as a missing currency filled from the instrument. The trade is kept.</dd></div>
+        <div><dt>Dirty rate</dt><dd>How much mess the generator adds on purpose. The default is 2% of rows.</dd></div>
+      </dl>
+
+      <h3>The app</h3>
+      <dl class="glossary">
+        <div><dt>Dataset</dt><dd>One set of the five tables, generated or uploaded. The same settings always give the same files.</dd></div>
+        <div><dt>Run</dt><dd>One engine processing one dataset through all five stages.</dd></div>
+        <div><dt>Comparison</dt><dd>The same dataset run on both engines, then checked for equal output.</dd></div>
+        <div><dt>Benchmark</dt><dd>Comparisons over several dataset sizes, one after another, with a summary table at the end.</dd></div>
+        <div><dt>Stage</dt><dd>One of the five steps. Each has its own time, CPU and peak memory numbers.</dd></div>
+        <div><dt>Event</dt><dd>A short message that something happened, like <code>StageCompleted</code>. Names ending in "Requested" ask for work. All others report facts.</dd></div>
+        <div><dt>Verification</dt><dd>Matching the two engines' outputs by trade id, allowing a cent of rounding. Above 200k rows it checks a fixed sample.</dd></div>
+        <div><dt>Row tracking</dt><dd>A table with the outcome of every input row. Rejected rows show up once validate is done, and all others when the run ends.</dd></div>
+        <div><dt>NDJSON</dt><dd>One JSON document per line. jq reads it line by line, and both engines write it as output.</dd></div>
+        <div><dt>Peak memory</dt><dd>The most RAM the run used at any moment, measured across the worker and any jq process it started.</dd></div>
+        <div><dt>Lean mode</dt><dd>A DuckDB setting that streams output and drops tables early. With insertion order turned off too, 1M rows went from 2.6 GB to 1.4 GB.</dd></div>
+        <div><dt>Spill</dt><dd>When DuckDB goes over its memory limit, it writes temporary data to disk instead of failing.</dd></div>
+      </dl>
+      <p class="takeaway"><b>Remember:</b> a dataset goes through a run of five stages. Two runs make a comparison, and several comparisons make a benchmark.</p>
+    </div>
+  </section>
+
+  <section class="part-body" id="start">
+    <div class="wrap">
+      <span class="kicker">Next</span>
+      <h2>Where to start reading</h2>
+      <p class="lead">Open these files in this order. Each one is short.</p>
+      <ol class="read">
+        <li><span class="mono">app/domain/models.py</span><span>The records. Learn the nouns first.</span></li>
+        <li><span class="mono">app/domain/ports.py</span><span>The interfaces every outer part must follow.</span></li>
+        <li><span class="mono">app/bootstrap.py</span><span>How all the pieces are created and connected.</span></li>
+        <li><span class="mono">app/application/services.py</span><span>What happens when a request comes in.</span></li>
+        <li><span class="mono">app/application/orchestrators.py</span><span>How the background work is started and finished.</span></li>
+        <li><span class="mono">app/application/pipeline.py</span><span>The five stages and how they are timed.</span></li>
+        <li><span class="mono">app/engines/duckdb_engine/sql</span><span>The real work, as SQL. Then compare it with <code>jq_engine/programs</code>.</span></li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">The numbers and the comparison itself are in the benchmark report. This page only covers how the app is built.</div>
+</footer>
+
+<script>
+  const links = [...document.querySelectorAll("nav.top a")];
+  const sections = links.map((a) => document.querySelector(a.getAttribute("href")));
+  const nav = document.querySelector("nav.top .wrap");
+  function mark() {
+    const y = window.scrollY + 120;
+    let current = -1;
+    sections.forEach((s, i) => { if (s && s.offsetTop <= y) current = i; });
+    links.forEach((a, i) => {
+      const on = i === current;
+      if (on && !a.classList.contains("on")) {
+        const left = a.offsetLeft - nav.offsetLeft;
+        if (left < nav.scrollLeft || left + a.offsetWidth > nav.scrollLeft + nav.clientWidth) nav.scrollTo({ left: left - 16 });
+      }
+      a.classList.toggle("on", on);
+    });
+  }
+  window.addEventListener("scroll", mark, { passive: true });
+  mark();
+</script>
