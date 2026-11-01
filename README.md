@@ -31,8 +31,9 @@ make run         # dashboard on http://127.0.0.1:8000, trade tracker on /tracker
 make benchmark   # 5k to 1M rows, both engines, results in data/reports/
 ```
 
-`make help` lists everything else, including `make datasets` (adds 1M and 5M) and `make reset`
-(deletes run outputs, saved state and caches, keeps the datasets).
+`make help` lists everything else, including `make datasets` (adds 1M and 5M). To clean up,
+`make reset` deletes run outputs, saved state and caches but keeps the datasets, `make clean`
+deletes everything generated, and `make fresh` cleans and sets the project up again from zero.
 
 ## What it does
 

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup check-tools install run test lint datasets benchmark scenarios server-stopped reset reset-all
+.PHONY: help setup check-tools install run test lint datasets benchmark scenarios server-stopped reset clean fresh
 
 JQ_MIN_VERSION := 1.7
 
@@ -52,6 +52,10 @@ reset: server-stopped  ## delete temporary files: run outputs, saved state, logs
 	find app tests -type d -name __pycache__ -prune -exec rm -rf {} +
 	@echo "Temporary files removed. Datasets in data/datasets and reports in data/reports were kept."
 
-reset-all: reset  ## also delete datasets, reports and the virtualenv (back to a fresh checkout)
-	rm -rf data .venv
-	@echo "Everything generated is gone. Run: make setup"
+clean: server-stopped  ## delete everything generated: datasets, reports, outputs, virtualenv, caches
+	rm -rf data .venv .pytest_cache .ruff_cache .mypy_cache
+	find app tests -type d -name __pycache__ -prune -exec rm -rf {} +
+	find . -name .DS_Store -not -path "./.git/*" -delete
+	@echo "Back to a fresh checkout. Your code, docs, .vscode and description are untouched. Run: make setup"
+
+fresh: clean setup  ## start from zero: clean everything, then set the project up again
