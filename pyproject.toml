@@ -17,7 +17,12 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.1", "httpx>=0.28", "ruff>=0.14", "mypy>=1.18"]
+dev = [
+    "pytest>=9.1",
+    "ruff>=0.14",
+    "mypy>=1.18",
+    "httpx2>=2.15",
+]
 
 [tool.ruff]
 line-length = 110
