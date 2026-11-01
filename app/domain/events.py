@@ -71,6 +71,7 @@ class StageStarted(DomainEvent):
 class StageCompleted(DomainEvent):
     run_id: str
     metrics: StageMetrics
+    outputs: dict[OutputName, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)

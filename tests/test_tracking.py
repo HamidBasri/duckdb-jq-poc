@@ -94,6 +94,27 @@ def test_engines_produce_the_same_row_table(generated: RunEngine) -> None:
     assert duck.tracking.states == jq.tracking.states
 
 
+@pytest.mark.parametrize(
+    ("engine", "source_format"), [(Engine.DUCKDB, SourceFormat.CSV), (Engine.JQ, SourceFormat.PARQUET)]
+)
+def test_rejects_so_far_match_the_final_row_table(
+    generated: RunEngine, engine: Engine, source_format: SourceFormat
+) -> None:
+    outcome = generated(engine, source_format, tag="early")
+    final_total, final = READER.find(
+        Path(outcome.outputs[OutputName.ROW_STATUS]), RowState.REJECTED, None, 10_000, 0
+    )
+    early_total, early = READER.find_rejects(
+        *generated.source(source_format), Path(outcome.outputs[OutputName.REJECTS]), None, None, 10_000, 0
+    )
+    assert final_total > 0 and early_total == final_total
+    assert [row.model_dump() for row in early] == [row.model_dump() for row in final]
+    first = READER.get_reject(
+        *generated.source(source_format), Path(outcome.outputs[OutputName.REJECTS]), early[0].source_row
+    )
+    assert first == early[0]
+
+
 def test_output_offsets_point_at_the_right_document(generated: RunEngine) -> None:
     outcome = generated(Engine.JQ, tag="offsets")
     _, rows = READER.find(Path(outcome.outputs[OutputName.ROW_STATUS]), RowState.DELIVERED, None, 25, 0)

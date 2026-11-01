@@ -146,43 +146,60 @@ def build_row_status(ctx: RunContext, outputs: dict[OutputName, str]) -> RowTrac
     )
 
 
+def _rejects_so_far_sql(source: Path, fmt: SourceFormat, rejects: Path) -> str:
+    """Row statuses for the rejected rows only, from the source file and the rejects file.
+
+    Validate writes the rejects file before transform starts, so this works while a run is still
+    going. The states match what `build_row_status` gives the same rows at the end.
+    """
+    return f"""
+        WITH raw AS (
+            SELECT source_row, nullif(trim(trade_id), '') AS trade_id
+            FROM ({_numbered_source_sql(source, fmt)})
+        ), first_rows AS (
+            SELECT trade_id, min(source_row) AS source_row
+            FROM raw WHERE trade_id IS NOT NULL GROUP BY trade_id
+        ), rejected AS (
+            SELECT f.source_row, f.trade_id, j.errors, coalesce(j.warnings, []::VARCHAR[]) AS warnings
+            FROM first_rows f
+            JOIN read_json({quote_literal(rejects)}, format = 'newline_delimited',
+                           columns = {_REJECT_COLUMNS}) j ON j.trade_id = f.trade_id
+            UNION ALL
+            SELECT source_row, NULL, ['E_TRADE_ID_MISSING'], []::VARCHAR[] FROM raw WHERE trade_id IS NULL
+        )
+        SELECT source_row, trade_id, 'rejected' AS state, 'validate' AS stopped_at,
+               NULL::BIGINT AS duplicate_of_row, errors, warnings, NULL::VARCHAR AS event_type,
+               NULL::INTEGER AS version, NULL::BOOLEAN AS is_latest, false AS in_exposure,
+               NULL::VARCHAR AS exposure_group, NULL::BIGINT AS output_offset
+        FROM rejected
+    """
+
+
 class DuckDbRowStatusReader:
     """`RowStatusReader` backed by DuckDB queries over the run's files."""
 
     def find(
         self, path: Path, state: RowState | None, search: str | None, limit: int, offset: int
     ) -> tuple[int, list[RowStatus]]:
-        conditions: list[str] = ["true"]
-        params: list[object] = []
-        if state is not None:
-            conditions.append("state = ?")
-            params.append(state.value)
-        if search:
-            term = search.strip()
-            if term.isdigit():
-                conditions.append("(source_row = ? OR trade_id ILIKE ?)")
-                params += [int(term), f"%{term}%"]
-            else:
-                conditions.append("trade_id ILIKE ?")
-                params.append(f"%{term}%")
-        where = " AND ".join(conditions)
-        source = f"read_parquet({quote_literal(path)})"
-        with duckdb.connect() as con:
-            total_row = con.execute(f"SELECT count(*) FROM {source} WHERE {where}", params).fetchone()
-            cursor = con.execute(
-                f"SELECT * FROM {source} WHERE {where} ORDER BY source_row LIMIT ? OFFSET ?",
-                [*params, limit, offset],
-            )
-            rows = _records(cursor)
-        return (int(total_row[0]) if total_row else 0), [RowStatus.model_validate(row) for row in rows]
+        return _find(f"read_parquet({quote_literal(path)})", state, search, limit, offset)
 
     def get(self, path: Path, source_row: int) -> RowStatus | None:
-        with duckdb.connect() as con:
-            cursor = con.execute(
-                f"SELECT * FROM read_parquet({quote_literal(path)}) WHERE source_row = ?", [source_row]
-            )
-            rows = _records(cursor)
-        return RowStatus.model_validate(rows[0]) if rows else None
+        return _get(f"read_parquet({quote_literal(path)})", source_row)
+
+    def find_rejects(
+        self,
+        source: Path,
+        fmt: SourceFormat,
+        rejects: Path,
+        state: RowState | None,
+        search: str | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[int, list[RowStatus]]:
+        return _find(f"({_rejects_so_far_sql(source, fmt, rejects)})", state, search, limit, offset)
+
+    def get_reject(self, source: Path, fmt: SourceFormat, rejects: Path, source_row: int) -> RowStatus | None:
+        return _get(f"({_rejects_so_far_sql(source, fmt, rejects)})", source_row)
 
     def source_record(self, path: Path, fmt: SourceFormat, source_row: int) -> dict[str, Any] | None:
         with duckdb.connect() as con:
@@ -208,6 +225,41 @@ class DuckDbRowStatusReader:
                 if needle in line and (record := json.loads(line)).get("trade_id") == trade_id:
                     return dict(record)
         return None
+
+
+def _find(
+    relation: str, state: RowState | None, search: str | None, limit: int, offset: int
+) -> tuple[int, list[RowStatus]]:
+    conditions: list[str] = ["true"]
+    params: list[object] = []
+    if state is not None:
+        conditions.append("state = ?")
+        params.append(state.value)
+    if search:
+        term = search.strip()
+        if term.isdigit():
+            conditions.append("(source_row = ? OR trade_id ILIKE ?)")
+            params += [int(term), f"%{term}%"]
+        else:
+            conditions.append("trade_id ILIKE ?")
+            params.append(f"%{term}%")
+    where = " AND ".join(conditions)
+    with duckdb.connect() as con:
+        con.execute("SET enable_progress_bar = false")
+        total_row = con.execute(f"SELECT count(*) FROM {relation} WHERE {where}", params).fetchone()
+        cursor = con.execute(
+            f"SELECT * FROM {relation} WHERE {where} ORDER BY source_row LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        )
+        rows = _records(cursor)
+    return (int(total_row[0]) if total_row else 0), [RowStatus.model_validate(row) for row in rows]
+
+
+def _get(relation: str, source_row: int) -> RowStatus | None:
+    with duckdb.connect() as con:
+        con.execute("SET enable_progress_bar = false")
+        rows = _records(con.execute(f"SELECT * FROM {relation} WHERE source_row = ?", [source_row]))
+    return RowStatus.model_validate(rows[0]) if rows else None
 
 
 def _records(cursor: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:

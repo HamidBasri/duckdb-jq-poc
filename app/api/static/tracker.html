@@ -288,7 +288,7 @@ async function api(path) {
   return body;
 }
 
-const view = { runs: [], runId: null, state: null, q: "", offset: 0, row: null };
+const view = { runs: [], runId: null, state: null, q: "", offset: 0, row: null, rejects: null };
 
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
@@ -301,6 +301,8 @@ function writeHash() {
   history.replaceState(null, "", `#${h}`);
 }
 const currentRun = () => view.runs.find((r) => r.run_id === view.runId);
+// "full": the row table built after the run. "rejects": validate is done, so its rejected rows are readable.
+const rowMode = (r) => r?.tracking && !r.tracking.error ? "full" : r?.outputs?.rejects && r.status !== "failed" ? "rejects" : null;
 
 /* ---------- runs ---------- */
 async function loadRuns(keepSelection = true) {
@@ -342,7 +344,7 @@ function renderRun() {
       <div><dt>Finished</dt><dd>${fmtDate(r.finished_at)}</dd></div>
       <div><dt>Pipeline time</dt><dd>${fmtS(total)}</dd></div>
       <div><dt>Source</dt><dd>${esc(r.source_format)}</dd></div>
-      <div><dt>Row tracking</dt><dd>${r.tracking ? (r.tracking.error ? "failed" : `${fmtN(r.tracking.rows)} rows in ${fmtS(r.tracking.seconds)}`) : r.status === "succeeded" ? "not recorded" : "after the run"}</dd></div>
+      <div><dt>Row tracking</dt><dd>${r.tracking ? (r.tracking.error ? "failed" : `${fmtN(r.tracking.rows)} rows in ${fmtS(r.tracking.seconds)}`) : r.status === "succeeded" ? "not recorded" : rowMode(r) ? "rejects now, all rows at the end" : "after the run"}</dd></div>
     </dl>
     <div class="stages">${stages}</div>
     ${r.error ? `<div class="note" style="color:var(--bad)">${esc(r.error)}</div>` : ""}`;
@@ -351,8 +353,16 @@ function renderRun() {
 
 function renderFunnel(r) {
   const t = r.tracking;
+  if (rowMode(r) === "rejects") {
+    const why = r.status === "succeeded"
+      ? "Row tracking was off for this run, so only the rejected rows are listed. They come straight from the rejects file."
+      : "Validation is done, so every rejected row is listed below. Duplicates, filtered and delivered rows follow when the run finishes.";
+    $("#funnel").innerHTML = `<div class="empty" style="grid-column: 1 / -1"><b><span id="rejects-count">${view.rejects == null ? "…" : fmtN(view.rejects)}</span> rejected rows ${r.status === "succeeded" ? "" : "so far"}</b><span>${why}</span></div>`;
+    $("#chips").innerHTML = "";
+    return;
+  }
   if (!t || t.error) {
-    $("#funnel").innerHTML = `<div class="empty" style="grid-column: 1 / -1"><b>${r.status === "succeeded" ? "This run has no row tracking" : "Rows appear when the run finishes"}</b><span>${r.status === "running" || r.status === "queued" ? "The stages above update live." : t?.error ? esc(t.error) : "Runs made before row tracking was added, or with tracking turned off, have no row table."}</span></div>`;
+    $("#funnel").innerHTML = `<div class="empty" style="grid-column: 1 / -1"><b>${r.status === "succeeded" ? "This run has no row tracking" : "Rejected rows appear once validate is done"}</b><span>${r.status === "running" || r.status === "queued" ? "The stages above update live. Every other row follows when the run finishes." : t?.error ? esc(t.error) : "Runs made before row tracking was added, or with tracking turned off, have no row table."}</span></div>`;
     return;
   }
   const s = t.states, total = t.rows;
@@ -383,19 +393,24 @@ function renderChips(r) {
 let rowsRequest = 0;
 async function loadRows() {
   const r = currentRun();
-  if (!r?.tracking || r.tracking.error) {
+  const mode = rowMode(r);
+  if (!mode) {
     $("#table-wrap").innerHTML = "";
     $("#pager").innerHTML = "";
     return;
   }
   const id = ++rowsRequest;
   const params = new URLSearchParams({ limit: PAGE, offset: view.offset });
-  if (view.state) params.set("state", view.state);
+  if (view.state && mode === "full") params.set("state", view.state);
   if (view.q) params.set("q", view.q);
   let page;
   try { page = await api(`/api/runs/${encodeURIComponent(r.run_id)}/rows?${params}`); }
   catch (err) { $("#table-wrap").innerHTML = `<div class="empty"><b>Could not load rows</b><span>${esc(err.message)}</span></div>`; return; }
   if (id !== rowsRequest) return;
+  if (!page.complete && !view.q) {
+    view.rejects = page.total;
+    if ($("#rejects-count")) $("#rejects-count").textContent = fmtN(page.total);
+  }
   if (!page.rows.length) {
     $("#table-wrap").innerHTML = `<div class="empty"><b>No rows match</b><span>Try another trade id, a row number, or clear the state filter.</span></div>`;
     $("#pager").innerHTML = "";
@@ -467,6 +482,7 @@ async function loadDetail(sourceRow) {
 /* ---------- selection ---------- */
 async function selectRun(runId, row = null) {
   view.runId = runId;
+  view.rejects = null;
   view.state = null;
   view.q = "";
   view.offset = 0;
@@ -515,10 +531,10 @@ let refreshTimer;
 function refreshSoon(rowsToo) {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(async () => {
-    const hadTracking = !!currentRun()?.tracking;
+    const before = rowMode(currentRun());
     await loadRuns(true);
     renderRun();
-    if (rowsToo || (!hadTracking && currentRun()?.tracking)) loadRows();
+    if (rowsToo || before !== rowMode(currentRun())) loadRows();
   }, 300);
 }
 function connect() {
@@ -528,7 +544,8 @@ function connect() {
   for (const type of ["RunStarted", "StageStarted", "StageCompleted", "RunFinished", "OutputsDiscarded", "ComparisonRequested"]) {
     source.addEventListener(type, (e) => {
       const data = JSON.parse(e.data);
-      refreshSoon(type === "RunFinished" && data.run_id === view.runId);
+      const rowsChanged = type === "RunFinished" || (type === "StageCompleted" && data.metrics.stage === "validate");
+      refreshSoon(rowsChanged && data.run_id === view.runId);
     });
   }
 }

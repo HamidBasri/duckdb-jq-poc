@@ -10,6 +10,7 @@ from app.domain.models import (
     DatasetManifest,
     DatasetStatus,
     Engine,
+    Entity,
     GenerationSpec,
     OutputName,
     RunOutcome,
@@ -44,6 +45,11 @@ class EngineRunner:
 
     def run_dir(self, engine: Engine, source_format: SourceFormat, tag: str) -> Path:
         return self.runs_dir / f"{engine}-{source_format}-{tag}"
+
+    def source(self, source_format: SourceFormat) -> tuple[Path, SourceFormat]:
+        resolved = self._dataset.source_path(self._dataset_dir, Entity.TRADES, source_format)
+        assert resolved is not None
+        return resolved
 
     def __call__(
         self,

@@ -16,6 +16,7 @@ from app.domain.models import (
     RowState,
     RowStatus,
     RunStatus,
+    SourceFormat,
     Stage,
     StageMetrics,
 )
@@ -39,6 +40,7 @@ class RowPage(BaseModel):
     offset: int
     limit: int
     rows: list[RowStatus]
+    complete: bool = True  # False: only the rejected rows, read before the row table exists
 
 
 class RowDetail(BaseModel):
@@ -49,6 +51,7 @@ class RowDetail(BaseModel):
     output: dict[str, Any] | None
     reject: dict[str, Any] | None
     output_note: str | None
+    complete: bool = True
 
 
 def _stage_detail(stage: Stage, row: RowStatus, source_file: str) -> tuple[StepStatus, str]:
@@ -146,39 +149,65 @@ class RowTrackingService:
         runs = [run for run in self._repos.runs.list() if run.status is not RunStatus.FAILED]
         return sorted(runs, key=lambda run: run.created_at, reverse=True)
 
-    def _status_file(self, run_id: str) -> tuple[PipelineRun, Path]:
+    def _run(self, run_id: str) -> PipelineRun:
         run = self._repos.runs.get(run_id)
         if run is None:
             raise NotFoundError(f"run {run_id!r} not found")
+        return run
+
+    def _source(self, run: PipelineRun) -> tuple[Path, SourceFormat] | None:
+        dataset = self._repos.datasets.get(run.dataset_id)
+        if dataset is None:
+            return None
+        resolved = dataset.source_path(
+            self._datasets_dir / dataset.dataset_id, Entity.TRADES, run.source_format
+        )
+        return resolved if resolved is not None and resolved[0].exists() else None
+
+    def _status_path(self, run: PipelineRun) -> Path | None:
         path = run.outputs.get(OutputName.ROW_STATUS)
-        if path is None or not Path(path).exists():
-            raise NotFoundError(
-                f"run {run_id!r} has no row tracking (still running, failed, or tracking is off)"
-            )
-        return run, Path(path)
+        return Path(path) if path and Path(path).exists() else None
+
+    def _rejects_so_far(self, run: PipelineRun) -> tuple[Path, SourceFormat, Path] | None:
+        """Source and rejects files, when validate is done but there is no row table (yet)."""
+        rejects = run.outputs.get(OutputName.REJECTS)
+        source = self._source(run)
+        if not rejects or not Path(rejects).exists() or source is None:
+            return None
+        return *source, Path(rejects)
+
+    @staticmethod
+    def _no_rows(run_id: str) -> NotFoundError:
+        return NotFoundError(f"run {run_id!r} has no row tracking yet (rows appear once validate is done)")
 
     def page(
         self, run_id: str, state: RowState | None, search: str | None, limit: int, offset: int
     ) -> RowPage:
-        _, path = self._status_file(run_id)
-        total, rows = self._reader.find(path, state, search, limit, offset)
-        return RowPage(total=total, offset=offset, limit=limit, rows=rows)
+        run = self._run(run_id)
+        if path := self._status_path(run):
+            total, rows = self._reader.find(path, state, search, limit, offset)
+            return RowPage(total=total, offset=offset, limit=limit, rows=rows)
+        if files := self._rejects_so_far(run):
+            total, rows = self._reader.find_rejects(*files, state, search, limit, offset)
+            return RowPage(total=total, offset=offset, limit=limit, rows=rows, complete=False)
+        raise self._no_rows(run_id)
 
     def detail(self, run_id: str, source_row: int) -> RowDetail:
-        run, path = self._status_file(run_id)
-        row = self._reader.get(path, source_row)
+        run = self._run(run_id)
+        complete = True
+        if path := self._status_path(run):
+            row = self._reader.get(path, source_row)
+        elif files := self._rejects_so_far(run):
+            row, complete = self._reader.get_reject(*files, source_row), False
+        else:
+            raise self._no_rows(run_id)
         if row is None:
             raise NotFoundError(f"row {source_row} not found in run {run_id!r}")
         source = None
         source_name = "the source file"
-        dataset = self._repos.datasets.get(run.dataset_id)
-        if dataset is not None:
-            resolved = dataset.source_path(
-                self._datasets_dir / dataset.dataset_id, Entity.TRADES, run.source_format
-            )
-            if resolved is not None and resolved[0].exists():
-                source_name = resolved[0].name
-                source = self._reader.source_record(resolved[0], resolved[1], source_row)
+        if resolved := self._source(run):
+            source_name = resolved[0].name
+            source = self._reader.source_record(resolved[0], resolved[1], source_row)
 
         output, output_note = None, None
         trades_file = run.outputs.get(OutputName.TRADES)
@@ -199,4 +228,5 @@ class RowTrackingService:
             output=output,
             reject=reject,
             output_note=output_note,
+            complete=complete,
         )

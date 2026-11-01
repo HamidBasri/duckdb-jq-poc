@@ -67,8 +67,9 @@ class PipelineRunner:
                 result, metrics = self._measure(engine, ctx, stage)
                 stages.append(metrics)
                 details[stage] = result.detail
-                outputs |= {name: str(path) for name, path in result.outputs.items()}
-                self._sink.put(StageCompleted(run_id=ctx.run_id, metrics=metrics))
+                stage_outputs = {name: str(path) for name, path in result.outputs.items()}
+                outputs |= stage_outputs
+                self._sink.put(StageCompleted(run_id=ctx.run_id, metrics=metrics, outputs=stage_outputs))
             quality = build_quality_report(details)
             quality_path = ctx.output_path(OutputName.QUALITY_REPORT)
             quality_path.write_text(json.dumps(quality, indent=2, sort_keys=True))

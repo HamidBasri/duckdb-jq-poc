@@ -5,6 +5,7 @@ nested JSON: DuckDB or jq. So I built the same pipeline twice, ran both on the s
 thousand to 1 million rows, and checked that they produce exactly the same output.
 
 **Report:** [hamidbasri.github.io/duckdb-jq-poc](https://hamidbasri.github.io/duckdb-jq-poc/)
+**How it's built:** [architecture in ten minutes](https://hamidbasri.github.io/duckdb-jq-poc/architecture.html)
 
 ## Results
 
@@ -55,7 +56,8 @@ so DuckDB converts the input for it first, and that time counts as jq's.
 
 After each comparison a checker matches both outputs document by document. A row tracker also
 records where every input row ended up (delivered, rejected, duplicate or filtered out), and the
-trade tracker page lets you search any trade and see its path through the stages.
+trade tracker page lets you search any trade and see its path through the stages. Rejected rows
+show up there as soon as validation is done; the other rows follow when the run finishes.
 
 ## How it's built
 

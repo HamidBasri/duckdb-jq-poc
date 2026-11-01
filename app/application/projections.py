@@ -75,6 +75,7 @@ class StateProjector:
             case StageCompleted(run_id=run_id) if run := repos.runs.get(run_id):
                 if run.status not in TERMINAL_RUN_STATUSES:
                     run.stages.append(event.metrics)
+                    run.outputs |= event.outputs  # rejects are readable once validate is done
                     repos.runs.save(run)
             case RunFinished(run_id=run_id) if run := repos.runs.get(run_id):
                 outcome = event.outcome
