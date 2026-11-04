@@ -811,7 +811,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
       <path class="edge dash" d="M970 244H988V530H160V510" marker-end="url(#s4a)"/>
       <text class="lbl mid" x="575" y="534">each run keeps a full copy of the rules in force when it was created</text>
     </svg></div>
-    <figcaption><b>A comparison is what the dashboard calls a run.</b> It points at one dataset and holds one pipeline run per engine. A benchmark is a list of comparisons, one per size, run one after another; it creates each size's dataset or reuses it. A dataset version points at the one it was made from (<code>parent_id</code>) and at the first of its family (<code>root_id</code>). Because each run keeps its own copy of the rules, changing the rules later never changes how an old result is explained.</figcaption>
+    <figcaption><b>A comparison is what the dashboard calls a run.</b> It points at one dataset and holds one pipeline run per engine. A benchmark is a list of comparisons, one per size, run one after another; it creates each size's dataset or reuses it. A dataset version points at the one it was made from (<code>parent_id</code>) and at the first of its family (<code>root_id</code>). Because each run keeps its own copy of the rules, changing the rules later never changes how an old result is explained. Comparisons, benchmarks and uploads also carry a <code>number</code> (Run 12, Benchmark 3, Upload 2) from a counter in <code>state/counters/</code>, so a number is never handed out twice, even after a delete.</figcaption>
   </figure>
 
   <h3>The same records on disk</h3>
@@ -830,7 +830,8 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
 │                                        <span class="c">quality_report.json  row_status.parquet</span>
 ├── <span class="d">state/</span>
 │   ├── runs/  comparisons/  benchmarks/  <span class="c">one JSON file per record</span>
-│   └── rules/1.json  rules/2.json  …      <span class="c">one file per rules version</span>
+│   ├── rules/1.json  rules/2.json  …      <span class="c">one file per rules version</span>
+│   └── counters/run.json  …               <span class="c">the last Run, Benchmark and Upload number used</span>
 └── <span class="d">reports/</span>                         <span class="c">bench-….md and .json, written by make benchmark</span></pre>
 </section>
 
@@ -1286,7 +1287,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
     <tbody>
       <tr><td class="grp" colspan="3">Services: the front desk. Each checks a request, saves it, announces it and answers at once</td></tr>
       <tr><td><code>DatasetService</code></td><td><code>services.py</code></td><td>Generates a dataset (or reuses one with the same settings), registers uploads, lists columns for Fix columns, saves fixes and edits as new versions, deletes datasets</td></tr>
-      <tr><td><code>ComparisonService</code></td><td><code>services.py</code></td><td>Creates a run: one pipeline run per engine, with a copy of the current rules</td></tr>
+      <tr><td><code>ComparisonService</code></td><td><code>services.py</code></td><td>Creates a run: gives it the next run number, makes one pipeline run per engine, and attaches a copy of the current rules</td></tr>
       <tr><td><code>BenchmarkService</code></td><td><code>services.py</code></td><td>Creates a benchmark from a list of sizes and settings</td></tr>
       <tr><td><code>HistoryService</code></td><td><code>services.py</code></td><td>Deletes a finished run or benchmark with its output files, or clears all finished ones. Refuses anything still going</td></tr>
       <tr><td><code>RulesService</code></td><td><code>services.py</code></td><td>Shows the current rules and which reject rules can be switched off; checks and saves new rule versions; lists their history</td></tr>
@@ -1302,6 +1303,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
       <tr><td><code>TaskSupervisor</code></td><td><code>messaging.py</code></td><td>Keeps track of background tasks, logs their failures, stops them at shutdown</td></tr>
       <tr><td><code>StateProjector</code></td><td><code>projections.py</code></td><td>Applies each event to the JSON records. The only place a status changes</td></tr>
       <tr><td><code>recover_interrupted</code></td><td><code>projections.py</code></td><td>At startup, marks anything that was in flight when the app stopped as failed</td></tr>
+      <tr><td><code>next_number</code></td><td><code>projections.py</code></td><td>Hands out the next Run, Benchmark or Upload number from a counter on disk, so numbers are never reused</td></tr>
       <tr><td><code>PipelineRunner</code></td><td><code>pipeline.py</code></td><td>Runs the five stages in order on one engine and measures each one</td></tr>
       <tr><td><code>ProcessJobExecutor</code></td><td><code>workers.py</code></td><td>The worker pool: 2 jobs at a time, a fresh process for each, rebuilt after a crash</td></tr>
       <tr><td><code>WorkerEventBridge</code></td><td><code>workers.py</code></td><td>Carries events from worker processes back onto the event bus</td></tr>
@@ -1417,8 +1419,8 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
     <div class="scr"><h4><i class="sw-tab"></i>Tabs</h4><ul>
       <li><b>Overview:</b> latest result, 4 key numbers, latest benchmark chart, what's running, recent runs</li>
       <li><b>Datasets:</b> every dataset with its versions nested under it; per row: view data, Run, Benchmark, Fix columns, Delete</li>
-      <li><b>Data:</b> "Input tables" pages through a dataset's raw rows, 50 at a time; click a value to change it, or the bin to remove a row, then "Save as vN". "Pipeline output" pages through a run's trades, rejects or exposures; click a row for the full JSON</li>
-      <li><b>Runs:</b> one row per run; click for stage bars, data quality, output files and the rules version. "Browse" opens the output in the Data tab, "Track rows" opens the tracker</li>
+      <li><b>Data:</b> "Input tables" pages through a dataset's raw rows, 50 at a time; click a value to change it, or the bin to remove a row, then "Save as vN". "Pipeline output" pages through a run's trades, rejects or exposures, under a line that names the run (number, engine, dataset, start time, benchmark, rules version, filters); click a row for the full JSON</li>
+      <li><b>Runs:</b> one row per run, named "Run 12 · 50,000 trades"; click for stage bars, data quality, output files and the rules version. "Browse" opens the output in the Data tab, "Track rows" opens the tracker</li>
       <li><b>Benchmarks:</b> one row per benchmark; click for the chart and stage table</li>
       <li><b>Rules:</b> correction rules, the 13 reject rules with on/off switches (locked ones say why), a save bar with a note, and every saved version</li>
       <li><b>Activity:</b> live log of every event, in plain words</li></ul></div>
@@ -1643,7 +1645,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
       <dt>Amendment chain</dt><dd>The versions of one trade: NEW, then AMEND, maybe CANCEL. Each points at the one before.</dd>
       <dt>Notional</dt><dd>Quantity times price: the size of a trade in money. <code>notional_usd</code> is the same in US dollars.</dd>
       <dt>Exposure</dt><dd>Money at risk with one parent company, from the latest version of each trade, cancellations skipped. Gross adds up sizes; net counts buys as plus and sells as minus.</dd>
-      <dt>Dataset</dt><dd>One set of the five tables, generated or uploaded, kept as files with a <code>manifest.json</code> that describes them.</dd>
+      <dt>Dataset</dt><dd>One set of the five tables, generated or uploaded, kept as files with a <code>manifest.json</code> that describes them. A generated one is named by its size plus any setting that isn't the default ("50,000 trades · tree 200"); an upload by its number ("Upload 2").</dd>
       <dt>Dataset version</dt><dd>A new copy of a dataset with fixes applied: renamed columns, changed values or removed rows. The original never changes.</dd>
       <dt>Expected columns</dt><dd>The column names the pipeline needs for each table. An upload that lacks them fails until you fix its columns.</dd>
       <dt>CSV / Parquet</dt><dd>CSV is plain text, one row per line. Parquet stores data by column, compressed, so it is smaller and much faster to read.</dd>
@@ -1668,6 +1670,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
     <section><h3>Running and measuring</h3><dl>
       <dt>Engine</dt><dd>One way of running the pipeline: DuckDB (SQL) or jq (JSON programs).</dd>
       <dt>Run</dt><dd>One dataset through the pipeline on one or both engines, then the output check. The code calls it a comparison.</dd>
+      <dt>Run number</dt><dd>The name every run gets, such as "Run 12". It counts up and is never reused, so it always points at one run. Benchmarks and uploads are numbered the same way.</dd>
       <dt>Pipeline run</dt><dd>One engine's part of a run, with its own stage times and output files.</dd>
       <dt>Benchmark</dt><dd>Several sizes, one run each, one after another, to see how each engine scales.</dd>
       <dt>Output check</dt><dd>Compares both engines' files document by document, matched by key. "Match" means the same documents; numbers may differ by at most 0.011, which covers rounding to cents.</dd>

@@ -100,6 +100,9 @@ side `HOLD` to `BUY`), and validation switches turn reject rules off. Each chang
 saved as a new version, new runs use it, and every run records the version it used. Rules that
 would make the two engines disagree stay locked; `tests/test_parity.py` checks every other one.
 Runs, benchmarks and datasets can be deleted, one at a time or with "Clear history".
+Every run, benchmark and upload gets a number (Run 12, Benchmark 3, Upload 2) that is never
+reused, so the Data tab, the activity log and the trade tracker always say which run the data
+came from.
 
 ## How it's built
 

@@ -173,9 +173,17 @@ class RuleSet(BaseModel):
         return [rule for rule in self.corrections if rule.enabled and rule.entity is entity]
 
 
+class Counter(BaseModel):
+    """The last display number handed out for one kind of record, so numbers are never reused."""
+
+    name: str
+    value: int = 0
+
+
 class DatasetManifest(BaseModel):
     dataset_id: str
     origin: str  # "generated" | "uploaded" | "version"
+    number: int = Field(default=0, description="Uploads only, shown as 'Upload 3'; never reused")
     status: DatasetStatus = DatasetStatus.PENDING
     created_at: datetime = Field(default_factory=utc_now)
     generation: GenerationSpec | None = None
@@ -307,6 +315,7 @@ class RunOutcome(BaseModel):
 class PipelineRun(BaseModel):
     run_id: str
     comparison_id: str
+    number: int = Field(default=0, description="Its comparison's number, shown as 'Run 12'")
     dataset_id: str
     engine: Engine
     source_format: SourceFormat
@@ -366,6 +375,7 @@ class VerificationResult(BaseModel):
 
 class Comparison(BaseModel):
     comparison_id: str
+    number: int = Field(default=0, description="Shown as 'Run 12'; never reused, even after a delete")
     dataset_id: str
     source_format: SourceFormat
     params: TransformParams
@@ -384,6 +394,7 @@ class Comparison(BaseModel):
 
 class Benchmark(BaseModel):
     benchmark_id: str
+    number: int = Field(default=0, description="Shown as 'Benchmark 3'; never reused, even after a delete")
     specs: list[GenerationSpec]
     engines: list[Engine]
     source_format: SourceFormat

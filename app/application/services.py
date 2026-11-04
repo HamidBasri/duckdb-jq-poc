@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
-from app.application.projections import Repositories
+from app.application.projections import Repositories, next_number
 from app.config import Settings
 from app.domain.contract import LOCKED_RULES, RAW_COLUMNS, RULE_TEXT, ErrorCode, suggest_mapping
 from app.domain.events import (
@@ -236,7 +236,8 @@ class DatasetService:
             with target.open("wb") as sink:
                 await asyncio.to_thread(shutil.copyfileobj, stream, sink)
             files[entity] = {fmt: target.name}
-        manifest = DatasetManifest(dataset_id=dataset_id, origin="uploaded", files=files)
+        number = next_number(self._repos, "upload", (d.number for d in self._datasets.list()))
+        manifest = DatasetManifest(dataset_id=dataset_id, origin="uploaded", number=number, files=files)
         self._datasets.save(manifest)
         await self._publisher.publish(DatasetUploaded(dataset_id=dataset_id))
         return manifest
@@ -284,12 +285,14 @@ class ComparisonService:
         if dataset.status is not DatasetStatus.READY:
             raise ConflictError(f"dataset {dataset_id!r} is {dataset.status}, not ready")
         comparison_id = new_id("cmp")
+        number = next_number(self._repos, "run", (c.number for c in self._repos.comparisons.list()))
         rules = current_rules(self._repos)
         unique_engines: list[Engine] = list(dict.fromkeys(engines))
         runs = {
             engine: PipelineRun(
                 run_id=new_id(f"run-{engine}"),
                 comparison_id=comparison_id,
+                number=number,
                 dataset_id=dataset_id,
                 engine=engine,
                 source_format=source_format,
@@ -302,6 +305,7 @@ class ComparisonService:
             self._repos.runs.save(run)
         comparison = Comparison(
             comparison_id=comparison_id,
+            number=number,
             dataset_id=dataset_id,
             source_format=source_format,
             params=params,
@@ -331,6 +335,7 @@ class ComparisonService:
 
 class BenchmarkService:
     def __init__(self, repositories: Repositories, publisher: EventPublisher) -> None:
+        self._repos = repositories
         self._benchmarks = repositories.benchmarks
         self._publisher = publisher
 
@@ -353,6 +358,7 @@ class BenchmarkService:
     ) -> Benchmark:
         benchmark = Benchmark(
             benchmark_id=new_id("bench"),
+            number=next_number(self._repos, "benchmark", (b.number for b in self._benchmarks.list())),
             specs=sorted(specs, key=lambda spec: spec.rows),
             engines=list(dict.fromkeys(engines)),
             source_format=source_format,

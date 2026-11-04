@@ -1,6 +1,8 @@
 """Read-model projection: the only place that mutates persisted state in response to events."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Literal
 
 from app.domain.events import (
     BenchmarkCompleted,
@@ -22,6 +24,7 @@ from app.domain.models import (
     BenchmarkStatus,
     Comparison,
     ComparisonStatus,
+    Counter,
     DatasetManifest,
     DatasetStatus,
     PipelineRun,
@@ -41,6 +44,7 @@ class Repositories:
     comparisons: Repository[Comparison]
     benchmarks: Repository[Benchmark]
     rules: Repository[RuleSet]
+    counters: Repository[Counter]
 
 
 class StateProjector:
@@ -152,3 +156,40 @@ def recover_interrupted(repositories: Repositories) -> None:
         if benchmark.status not in (BenchmarkStatus.COMPLETED, BenchmarkStatus.FAILED):
             benchmark.status, benchmark.error, benchmark.finished_at = BenchmarkStatus.FAILED, reason, now
             repositories.benchmarks.save(benchmark)
+
+
+NumberedKind = Literal["run", "benchmark", "upload"]
+
+
+def next_number(repositories: Repositories, kind: NumberedKind, taken: Iterable[int]) -> int:
+    """Hand out the next display number for `kind` (Run 12, Benchmark 3, Upload 2).
+
+    The counter is kept on disk, so a number is never handed out twice, even after its record is
+    deleted. It also starts above every number in `taken`, in case the counter file was removed.
+    """
+    counter = repositories.counters.get(kind) or Counter(name=kind)
+    counter.value = max(counter.value, *taken, 0) + 1
+    repositories.counters.save(counter)
+    return counter.value
+
+
+def number_unnumbered(repositories: Repositories) -> None:
+    """Give records saved before numbering existed a number, oldest first."""
+    comparisons = sorted(repositories.comparisons.list(), key=lambda c: c.created_at)
+    for comparison in (c for c in comparisons if not c.number):
+        comparison.number = next_number(repositories, "run", (c.number for c in comparisons))
+        repositories.comparisons.save(comparison)
+        for run_id in comparison.run_ids.values():
+            if (run := repositories.runs.get(run_id)) is not None:
+                run.number = comparison.number
+                repositories.runs.save(run)
+    benchmarks = sorted(repositories.benchmarks.list(), key=lambda b: b.created_at)
+    for benchmark in (b for b in benchmarks if not b.number):
+        benchmark.number = next_number(repositories, "benchmark", (b.number for b in benchmarks))
+        repositories.benchmarks.save(benchmark)
+    uploads = sorted(
+        (d for d in repositories.datasets.list() if d.origin == "uploaded"), key=lambda d: d.created_at
+    )
+    for upload in (d for d in uploads if not d.number):
+        upload.number = next_number(repositories, "upload", (d.number for d in uploads))
+        repositories.datasets.save(upload)

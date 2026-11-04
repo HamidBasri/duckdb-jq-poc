@@ -230,7 +230,7 @@ tr.child td:first-child::before { content: ""; position: absolute; left: 26px; t
   .run-grid, .bench-grid { grid-template-columns: minmax(0, 1fr) auto; padding-block: 10px; }
   .run-grid > .hide-sm, .bench-grid > .hide-sm { display: none; }
 }
-.detail { padding: 18px 20px 20px; display: grid; gap: 16px; border-top: 1px solid var(--line); }
+.detail { padding: 18px 20px 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; border-top: 1px solid var(--line); }
 .erows { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(150px, auto); gap: 10px 16px; align-items: center; }
 .sbar { display: flex; height: 22px; border-radius: 5px; overflow: hidden; background: var(--surface-2); }
 .sbar span { display: block; height: 100%; min-width: 2px; }
@@ -266,6 +266,7 @@ tr.child td:first-child::before { content: ""; position: absolute; left: 26px; t
 details.table > summary { cursor: pointer; font-size: 0.86rem; color: var(--ink-2); font-weight: 600; }
 details.table[open] > summary { margin-bottom: 10px; }
 details.table .table-wrap { border: 1px solid var(--line); border-radius: 8px; }
+details.table th, details.table td { padding-left: 10px; padding-right: 10px; }
 
 /* ---------- activity ---------- */
 .log { list-style: none; margin: 0; padding: 0; max-height: 70vh; overflow-y: auto; }
@@ -351,6 +352,12 @@ details.more[open] > summary { margin-bottom: 14px; }
 
 /* ---------- data explorer ---------- */
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.run-context { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--surface-2); font-size: 0.86rem; color: var(--ink-2); }
+.run-context b { color: var(--ink); }
+.run-context .muted { flex-basis: 100%; }
+td.links { white-space: nowrap; }
+td.links .sub { display: flex; gap: 10px; font-size: 0.8rem; white-space: nowrap; }
+td.links .btn.link { padding: 0; height: auto; font-size: inherit; }
 .toolbar select, .toolbar input[type="search"] { height: 36px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); min-width: 0; max-width: 100%; }
 .toolbar select { max-width: min(420px, 100%); }
 .toolbar .grow { flex: 1 1 200px; }
@@ -530,6 +537,7 @@ input.switch:disabled { cursor: not-allowed; opacity: 0.55; }
         <span class="chips tight" id="o-outputs" role="group" aria-label="Output file"></span>
         <input type="search" id="o-search" class="grow" placeholder="Trade id, or any value" aria-label="Search documents">
       </div>
+      <div class="run-context" id="o-context" hidden></div>
       <div class="grid-wrap" id="o-grid"></div>
       <div class="pager" id="o-pager"></div>
     </div>
@@ -756,6 +764,13 @@ function pill(status) {
   return `<span class="pill tone-${tone}${tone === "warn" ? " live-pill" : ""}">${esc(label)}</span>`;
 }
 const settingsText = (s) => s ? `seed ${s.seed} · ${+(s.dirty_rate * 100).toFixed(2)}% messy · tree ${s.hierarchy_depth} · chain ${s.max_chain_length}` : "";
+// only the settings that differ from the defaults, so two datasets of the same size get different names
+const settingsDiff = (s) => [s.seed !== 42 && `seed ${s.seed}`, s.dirty_rate !== 0.02 && `${+(s.dirty_rate * 100).toFixed(2)}% messy`,
+  s.hierarchy_depth !== 7 && `tree ${s.hierarchy_depth}`, s.max_chain_length !== 5 && `chain ${s.max_chain_length}`].filter(Boolean).join(" · ");
+const stamp = (iso) => iso ? new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+const runName = (c) => c?.number ? `Run ${c.number}` : "A new run";
+const benchName = (b) => b?.number ? `Benchmark ${b.number}` : "A new benchmark";
+const benchOf = (c) => c?.benchmark_id ? state.benchmarksById.get(c.benchmark_id) : null;
 
 async function api(path, options = {}) {
   const res = await fetch(path, options);
@@ -800,7 +815,7 @@ function confirmDelete(title, text) {
 }
 
 /* ---------- state ---------- */
-const state = { datasets: [], comparisons: [], benchmarks: [], datasetsById: new Map(), runIndex: new Map() };
+const state = { datasets: [], comparisons: [], benchmarks: [], datasetsById: new Map(), comparisonsById: new Map(), benchmarksById: new Map(), runIndex: new Map() };
 const expanded = { runs: new Set(), bench: new Set() };
 const touched = { runs: false, bench: false };
 
@@ -811,8 +826,11 @@ function datasetTitle(id) {
     const root = state.datasetsById.get(d.root_id);
     return `${root ? datasetTitle(root.dataset_id) : d.root_id} · v${d.version}`;
   }
-  if (d.generation) return `${fmtN(d.generation.rows)} trades`;
-  return "Uploaded files";
+  if (d.generation) {
+    const diff = settingsDiff(d.generation);
+    return `${fmtN(d.generation.rows)} trades${diff ? ` · ${diff}` : ""}`;
+  }
+  return d.number ? `Upload ${d.number}` : "Uploaded files";
 }
 const nextVersion = (d) => {
   const root = d.root_id ?? d.dataset_id;
@@ -869,30 +887,30 @@ function renderOverview() {
 
   const items = [];
   for (const d of state.datasets.filter((d) => d.status === "pending")) {
-    items.push(`<li><div class="what">${pill("pending")} <b>${esc(datasetTitle(d.dataset_id))}</b> <span class="muted">${esc(d.origin === "version" ? "applying the column fix" : settingsText(d.generation))}</span></div></li>`);
+    items.push(`<li><div class="what">${pill("pending")} <b>${esc(datasetTitle(d.dataset_id))}</b> <span class="muted">${esc(d.origin === "version" ? "writing the new version" : d.origin === "uploaded" ? "checking the columns" : settingsText(d.generation))}</span></div></li>`);
   }
   for (const rep of state.comparisons) {
     for (const r of rep.runs.filter((r) => ACTIVE.has(r.status))) {
       const at = r.current_stage ? STAGES.indexOf(r.current_stage) : -1;
-      items.push(`<li><div class="what"><span class="etag ${r.engine}">${ENGINE[r.engine]}</span> <b>${esc(datasetTitle(rep.comparison.dataset_id))}</b>
+      items.push(`<li><div class="what"><span class="etag ${r.engine}">${ENGINE[r.engine]}</span> <b>${esc(runName(rep.comparison))} · ${esc(datasetTitle(rep.comparison.dataset_id))}</b>
         <span class="muted">${r.status === "queued" ? "waiting for a free worker" : r.current_stage ? `${esc(r.current_stage)}: ${esc(STAGE_INFO[r.current_stage])}` : "starting"}</span>
-        ${rep.comparison.benchmark_id ? `<span class="tag">benchmark</span>` : ""}</div>
+        ${rep.comparison.benchmark_id ? `<span class="tag">${esc(benchName(benchOf(rep.comparison)))}</span>` : ""}</div>
         <div class="progress5" aria-label="Stage ${at + 1} of 5">${STAGES.map((s, i) => `<span class="${i === at ? "now" : r.stages[s] || i < at ? "done" : ""}"></span>`).join("")}</div></li>`);
     }
-    if (rep.comparison.status === "verifying") items.push(`<li><div class="what">${pill("verifying")} <b>${esc(datasetTitle(rep.comparison.dataset_id))}</b> <span class="muted">comparing DuckDB and jq outputs</span></div></li>`);
+    if (rep.comparison.status === "verifying") items.push(`<li><div class="what">${pill("verifying")} <b>${esc(runName(rep.comparison))} · ${esc(datasetTitle(rep.comparison.dataset_id))}</b> <span class="muted">comparing DuckDB and jq outputs</span></div></li>`);
   }
   $("#ov-running").innerHTML = items.join("") || `<li class="empty"><b>Nothing running</b><span>Progress shows here while runs and benchmarks are going.</span></li>`;
   $("#ov-running-count").textContent = items.length ? `${items.length} in progress` : "";
 
   const recent = state.comparisons.slice(0, 6);
   $("#ov-recent").innerHTML = recent.length ? `<table>
-    <thead><tr><th>Dataset</th><th class="r">DuckDB</th><th class="r">jq</th><th class="r">jq vs DuckDB</th><th>Outputs</th><th>Status</th><th class="r">When</th></tr></thead>
+    <thead><tr><th>Run</th><th class="r">DuckDB</th><th class="r">jq</th><th class="r">jq vs DuckDB</th><th>Outputs</th><th>Status</th><th class="r">When</th></tr></thead>
     <tbody>${recent.map((rep) => {
       const c = rep.comparison;
-      return `<tr><td><b>${esc(datasetTitle(c.dataset_id))}</b><span class="sub">${esc(c.source_format)}${c.benchmark_id ? " · benchmark" : ""}</span></td>
+      return `<tr><td><b>${esc(runName(c))} · ${esc(datasetTitle(c.dataset_id))}</b><span class="sub">${esc([c.source_format, c.benchmark_id ? benchName(benchOf(c)) : ""].filter(Boolean).join(" · "))}</span></td>
         <td class="r">${engineTime(rep, "duckdb")}</td><td class="r">${engineTime(rep, "jq")}</td>
         <td class="r">${rep.slowdown_vs_duckdb?.jq ? fmtX(rep.slowdown_vs_duckdb.jq.total) : `<span class="muted">–</span>`}</td>
-        <td>${matchPill(rep)}</td><td>${pill(c.status)}</td><td class="r muted">${esc(ago(c.created_at))}</td></tr>`;
+        <td>${matchPill(rep)}</td><td>${pill(c.status)}</td><td class="r muted" title="${esc(stamp(c.created_at))}">${esc(ago(c.created_at))}</td></tr>`;
     }).join("")}</tbody></table>` : `<div class="empty"><b>No runs yet</b><span>Runs and benchmark runs appear here.</span></div>`;
 }
 
@@ -945,7 +963,7 @@ function renderDatasets() {
 
   const select = $("#r-dataset"), current = select.value;
   select.innerHTML = ready.length
-    ? ready.map((d) => `<option value="${esc(d.dataset_id)}">${esc(datasetTitle(d.dataset_id))}${d.generation ? ` · ${esc(settingsText(d.generation))}` : ""}</option>`).join("")
+    ? ready.map((d) => `<option value="${esc(d.dataset_id)}">${esc(datasetTitle(d.dataset_id))}</option>`).join("")
     : `<option value="">No datasets ready yet</option>`;
   if ([...select.options].some((o) => o.value === current)) select.value = current;
   $("#run-submit").disabled = !ready.length;
@@ -1007,7 +1025,7 @@ function runDetail(rep) {
       ${["trades", "rejects", "exposures"].some((o) => r.outputs.includes(o)) ? `<button type="button" class="btn small link" data-browse="${esc(r.run_id)}">Browse</button>` : ""}
       ${r.outputs.includes("row_status") ? `<a class="btn small link" href="/tracker#run=${encodeURIComponent(r.run_id)}">Track rows</a>` : ""}
       ${r.outputs.filter((o) => OUTPUT_LABEL[o]).map((o) => `<button type="button" class="btn small link" data-preview="${esc(r.run_id)}" data-output="${esc(o)}">${OUTPUT_LABEL[o]}</button>`).join("")}</div>`).join("")}</div></div>` : ""}
-    <div class="meta"><a href="#rules">rules version ${c.rules_version}</a><span class="id">${esc(c.comparison_id)}</span><span class="id">${esc(c.dataset_id)}</span></div>
+    <div class="meta"><span>${esc(runName(c))}, started ${esc(stamp(c.created_at))}</span><a href="#rules">rules version ${c.rules_version}</a><span class="id">${esc(c.comparison_id)}</span><span class="id">${esc(c.dataset_id)}</span></div>
   </div>`;
 }
 
@@ -1016,12 +1034,12 @@ function runRow(rep) {
   const sub = [c.source_format, filterText(c.params), c.parallel_engines ? "engines at the same time" : "", c.rules_version ? `rules v${c.rules_version}` : ""].filter(Boolean).join(" · ");
   return `<li class="${open ? "open" : ""}" data-row="runs" data-id="${esc(c.comparison_id)}">
     <div class="row-main run-grid">
-      <div class="cell-title"><b>${esc(datasetTitle(c.dataset_id))} ${pill(c.status)}</b><small>${esc(sub)}</small></div>
+      <div class="cell-title"><b>${esc(runName(c))} · ${esc(datasetTitle(c.dataset_id))} ${pill(c.status)}</b><small>${esc(sub)}</small></div>
       <div class="cell-r hide-sm">${engineTime(rep, "duckdb")}</div>
       <div class="cell-r hide-sm">${engineTime(rep, "jq")}</div>
       <div class="cell-r hide-sm">${rep.slowdown_vs_duckdb?.jq ? fmtX(rep.slowdown_vs_duckdb.jq.total) : `<span class="muted">–</span>`}</div>
       <div class="hide-sm">${matchPill(rep)}</div>
-      <div class="cell-r muted hide-sm">${esc(ago(c.created_at))}</div>
+      <div class="cell-r muted hide-sm" title="${esc(stamp(c.created_at))}">${esc(ago(c.created_at))}</div>
       <div class="cell-acts">
         <button type="button" class="ibtn del" data-act="del-run" data-id="${esc(c.comparison_id)}" title="Delete run" aria-label="Delete run">${icon("trash")}</button>
         <button type="button" class="ibtn" data-toggle aria-expanded="${open}" aria-label="Show details">${icon("chevron")}</button>
@@ -1036,7 +1054,7 @@ function renderRuns() {
   $("#count-runs").textContent = own.length || "";
   if (!touched.runs && own[0]) expanded.runs.add(own[0].comparison.comparison_id);
   $("#runs-card").innerHTML = own.length ? `
-    <div class="rows-head run-grid"><span>Dataset</span><span class="cell-r">DuckDB</span><span class="cell-r">jq</span><span class="cell-r">jq vs DuckDB</span><span>Outputs</span><span class="cell-r">When</span><span></span></div>
+    <div class="rows-head run-grid"><span>Run</span><span class="cell-r">DuckDB</span><span class="cell-r">jq</span><span class="cell-r">jq vs DuckDB</span><span>Outputs</span><span class="cell-r">When</span><span></span></div>
     <ul class="rows">${own.slice(0, 50).map(runRow).join("")}</ul>`
     : `<div class="empty"><b>No runs yet</b><span>Start one on any dataset. Benchmark runs are listed under Benchmarks.</span><button type="button" class="btn small primary" data-open="run">New run</button></div>`;
 }
@@ -1061,15 +1079,14 @@ function benchChart(rep) {
 }
 function benchTable(rep) {
   return `<details class="table"><summary>Stage-by-stage numbers</summary><div class="table-wrap"><table>
-    <thead><tr><th class="r">Trades</th><th>Engine</th>${STAGES.map((s) => `<th class="r">${s}</th>`).join("")}<th class="r">Total</th><th class="r">Peak memory</th><th class="r">Rows/s</th><th class="r">vs DuckDB</th><th>Outputs</th><th></th></tr></thead>
+    <thead><tr><th>Run</th><th class="r">Trades</th>${STAGES.map((s) => `<th class="r">${s}</th>`).join("")}<th class="r">Total</th><th class="r">Peak memory</th><th class="r">Rows/s</th><th class="r">vs DuckDB</th><th>Outputs</th></tr></thead>
     <tbody>${rep.rows.map((r) => `<tr>
-      <td class="r">${fmtN(r.rows)}</td><td><span class="etag ${r.engine}">${ENGINE[r.engine]}</span>${r.error ? `<span class="sub" style="color:var(--bad)">${esc(r.error)}</span>` : ""}</td>
+      <td class="links"><b>Run ${r.run_number}</b> <span class="etag ${r.engine}">${ENGINE[r.engine]}</span>${r.error ? `<span class="sub" style="color:var(--bad)">${esc(r.error)}</span>` : ""}<span class="sub">${["trades", "rejects", "exposures"].some((o) => state.runIndex.get(r.run_id)?.outputs.includes(o)) ? `<button type="button" class="btn small link" data-browse="${esc(r.run_id)}">Browse</button>` : ""}${r.status === "succeeded" ? `<a href="/tracker#run=${encodeURIComponent(r.run_id)}">Track rows</a>` : ""}</span></td><td class="r">${fmtN(r.rows)}</td>
       ${STAGES.map((s) => `<td class="r">${fmtS(r.stage_seconds[s])}</td>`).join("")}
       <td class="r"><b>${r.status === "succeeded" ? fmtS(r.total_seconds) : STATUS[r.status]?.[0] ?? r.status}</b></td>
       <td class="r">${fmtMB(r.peak_rss_mb)}</td><td class="r">${fmtN(r.rows_per_second)}</td>
       <td class="r">${r.slowdown_vs_duckdb ? fmtX(r.slowdown_vs_duckdb) : "–"}</td>
-      <td>${r.equivalent == null ? "–" : r.equivalent ? `<span class="pill tone-good">Match</span>` : `<span class="pill tone-bad">Differ</span>`}</td>
-      <td>${r.status === "succeeded" ? `<a href="/tracker#run=${encodeURIComponent(r.run_id)}">Track rows</a>` : ""}</td></tr>`).join("")}</tbody></table></div></details>`;
+      <td>${r.equivalent == null ? "–" : r.equivalent ? `<span class="pill tone-good">Match</span>` : `<span class="pill tone-bad">Differ</span>`}</td></tr>`).join("")}</tbody></table></div></details>`;
 }
 function benchSummary(rep) {
   const b = rep.benchmark;
@@ -1087,10 +1104,10 @@ function benchRow(rep) {
   const b = rep.benchmark, open = expanded.bench.has(b.benchmark_id);
   return `<li class="${open ? "open" : ""}" data-row="bench" data-id="${esc(b.benchmark_id)}">
     <div class="row-main bench-grid">
-      <div class="cell-title"><b>${esc(b.specs.map((s) => sizeLabel(s.rows)).join(", "))} trades</b><small>${esc(benchSubtitle(b))}</small></div>
+      <div class="cell-title"><b>${esc(benchName(b))} · ${esc(b.specs.map((s) => sizeLabel(s.rows)).join(", "))} trades</b><small>${esc(benchSubtitle(b))}</small></div>
       <div class="hide-sm">${pill(b.status)}</div>
       <div class="hide-sm">${benchSummary(rep)}</div>
-      <div class="cell-r muted hide-sm">${esc(ago(b.created_at))}</div>
+      <div class="cell-r muted hide-sm" title="${esc(stamp(b.created_at))}">${esc(ago(b.created_at))}</div>
       <div class="cell-acts">
         <a class="ibtn" href="/api/benchmarks/${encodeURIComponent(b.benchmark_id)}/report.md" target="_blank" rel="noopener" title="Markdown report" aria-label="Markdown report">${icon("doc")}</a>
         <button type="button" class="ibtn del" data-act="del-bench" data-id="${esc(b.benchmark_id)}" title="Delete benchmark" aria-label="Delete benchmark">${icon("trash")}</button>
@@ -1101,7 +1118,7 @@ function benchRow(rep) {
       ${b.error ? `<div class="error">${esc(b.error)}</div>` : ""}
       ${rep.rows.length || ACTIVE.has(b.status) ? benchChart(rep) : ""}
       ${rep.rows.length ? benchTable(rep) : ""}
-      <div class="meta"><span class="id">${esc(b.benchmark_id)}</span><span>${b.discard_outputs ? "large output files deleted after each size" : "output files kept"}</span></div>
+      <div class="meta"><span>${esc(benchName(b))}, started ${esc(stamp(b.created_at))}</span><span>${b.discard_outputs ? "trades and rejects files deleted after each size" : "output files kept"}</span><span class="id">${esc(b.benchmark_id)}</span></div>
     </div>` : ""}
   </li>`;
 }
@@ -1122,7 +1139,9 @@ async function refresh() {
   try {
     const [datasets, comparisons, benchmarks] = await Promise.all([api("/api/datasets"), api("/api/comparisons"), api("/api/benchmarks")]);
     Object.assign(state, { datasets, comparisons, benchmarks, datasetsById: new Map(datasets.map((d) => [d.dataset_id, d])) });
-    state.runIndex = new Map(comparisons.flatMap((rep) => rep.runs.map((r) => [r.run_id, { engine: r.engine, dataset: rep.comparison.dataset_id }])));
+    state.comparisonsById = new Map(comparisons.map((rep) => [rep.comparison.comparison_id, rep.comparison]));
+    state.benchmarksById = new Map(benchmarks.map((rep) => [rep.benchmark.benchmark_id, rep.benchmark]));
+    state.runIndex = new Map(comparisons.flatMap((rep) => rep.runs.map((r) => [r.run_id, { engine: r.engine, dataset: rep.comparison.dataset_id, comparison: rep.comparison, outputs: r.outputs }])));
     const keepOpen = openTables();
     renderOverview(); renderDatasets(); renderRuns(); renderBenchmarks();
     if (location.hash === "#data") renderExplorerPickers();
@@ -1137,11 +1156,12 @@ function describe(type, d) {
   const run = state.runIndex.get(d.run_id);
   // a brand-new run can be ahead of the last refresh; its id still starts with the engine
   const engine = run?.engine ?? String(d.run_id ?? "").match(/^run-(duckdb|jq)-/)?.[1];
-  const who = run ? `${ENGINE[run.engine]} on ${datasetTitle(run.dataset)}` : engine ? ENGINE[engine] : d.run_id;
+  const who = run ? `${runName(run.comparison)} · ${ENGINE[run.engine]} on ${datasetTitle(run.dataset)}` : engine ? ENGINE[engine] : d.run_id;
+  const cmp = state.comparisonsById.get(d.comparison_id), bench = state.benchmarksById.get(d.benchmark_id);
   switch (type) {
     case "DatasetGenerationRequested": return `Creating dataset: ${fmtN(d.spec.rows)} trades, ${settingsText(d.spec)}`;
-    case "DatasetUploaded": return `Files uploaded, checking ${d.dataset_id}`;
-    case "DatasetVersionRequested": return `Creating ${d.dataset_id} with fixed columns`;
+    case "DatasetUploaded": return `${datasetTitle(d.dataset_id)}: files received, checking the columns`;
+    case "DatasetVersionRequested": return `Creating ${datasetTitle(d.dataset_id)} from ${datasetTitle(d.parent_id)}`;
     case "DatasetReady": return `Dataset ready: ${datasetTitle(d.dataset_id)}`;
     case "DatasetFailed": return `Dataset failed: ${d.error}`;
     case "RunStarted": return `${who}: started`;
@@ -1149,24 +1169,38 @@ function describe(type, d) {
     case "StageCompleted": return `${who}: ${d.metrics.stage} done in ${fmtS(d.metrics.wall_seconds)}, ${fmtN(d.metrics.rows_out)} rows, ${fmtMB(d.metrics.peak_rss_mb)} peak`;
     case "RunFinished": return d.outcome.succeeded ? `${who}: finished in ${fmtS(d.outcome.stages.reduce((a, s) => a + s.wall_seconds, 0))}` : `${who}: failed: ${d.outcome.error}`;
     case "OutputsDiscarded": return `${who}: large output files deleted`;
-    case "ComparisonRequested": return "Run requested";
-    case "ComparisonStarted": return "Run started";
-    case "VerificationStarted": return "Checking that the outputs match";
-    case "ComparisonCompleted": return d.verification ? (d.verification.checks.every((k) => k.left_rows === k.right_rows && k.keys_match && !k.mismatched_docs) && d.verification.quality_reports_match ? "Run done: outputs match" : "Run done: outputs differ") : `Run done${d.note ? `: ${d.note}` : ""}`;
-    case "BenchmarkRequested": return "Benchmark requested";
-    case "BenchmarkProgressed": return "Benchmark: next size started";
-    case "BenchmarkCompleted": return d.error ? `Benchmark failed: ${d.error}` : "Benchmark finished";
+    case "ComparisonRequested": return `${runName(cmp)} requested${cmp ? ` on ${datasetTitle(cmp.dataset_id)}` : ""}`;
+    case "ComparisonStarted": return `${runName(cmp)} started`;
+    case "VerificationStarted": return `${runName(cmp)}: checking that the outputs match`;
+    case "ComparisonCompleted": return `${runName(cmp)} done${d.verification ? (d.verification.checks.every((k) => k.left_rows === k.right_rows && k.keys_match && !k.mismatched_docs) && d.verification.quality_reports_match ? ": outputs match" : ": outputs differ") : d.note ? `: ${d.note}` : ""}`;
+    case "BenchmarkRequested": return `${benchName(bench)} requested${bench ? `: ${bench.specs.map((s) => sizeLabel(s.rows)).join(", ")} trades` : ""}`;
+    case "BenchmarkProgressed": return `${benchName(bench)}: ${runName(state.comparisonsById.get(d.comparison_id))} started`;
+    case "BenchmarkCompleted": return d.error ? `${benchName(bench)} failed: ${d.error}` : `${benchName(bench)} finished`;
     case "RulesChanged": return `Rules saved as version ${d.version}; new runs use it`;
-    case "RecordsDeleted": return d.kind === "history" ? `History cleared (${d.ids.length} items)` : `Deleted ${d.kind} ${d.ids.join(", ")}`;
+    case "RecordsDeleted": return d.kind === "history" ? `History cleared (${d.ids.length} items)` : `Deleted ${deletedName(d.kind, d.ids[0])}`;
     default: return type;
   }
 }
+// names of deleted records come from the last refresh, which still holds them
+function deletedName(kind, id) {
+  if (kind === "dataset") return `dataset ${datasetTitle(id)}`;
+  if (kind === "comparison") return runName(state.comparisonsById.get(id));
+  if (kind === "benchmark") return benchName(state.benchmarksById.get(id));
+  return `${kind} ${id}`;
+}
+// an event about a record this page hasn't loaded yet waits for a refresh, so the log can name it
+const knows = (d) => (!d.dataset_id || state.datasetsById.has(d.dataset_id)) && (!d.comparison_id || state.comparisonsById.has(d.comparison_id))
+  && (!d.benchmark_id || state.benchmarksById.has(d.benchmark_id)) && (!d.run_id || state.runIndex.has(d.run_id));
+let logQueue = Promise.resolve();
 function logEvent(type, data) {
-  $("#log-empty").hidden = true;
-  const li = document.createElement("li");
-  li.innerHTML = `<time>${new Date(data.occurred_at).toLocaleTimeString("en-GB")}</time><span>${esc(describe(type, data))}<span class="kind">${esc(type)}</span></span>`;
-  $("#log").prepend(li);
-  while ($("#log").childElementCount > 300) $("#log").lastChild.remove();
+  logQueue = logQueue.then(async () => {
+    if (type !== "RecordsDeleted" && !knows(data)) await refresh();
+    $("#log-empty").hidden = true;
+    const li = document.createElement("li");
+    li.innerHTML = `<time>${new Date(data.occurred_at).toLocaleTimeString("en-GB")}</time><span>${esc(describe(type, data))}<span class="kind">${esc(type)}</span></span>`;
+    $("#log").prepend(li);
+    while ($("#log").childElementCount > 300) $("#log").lastChild.remove();
+  });
 }
 function connect() {
   const source = new EventSource("/api/events");
@@ -1422,10 +1456,12 @@ document.addEventListener("click", async (event) => {
 
   const browse = event.target.closest("[data-browse]");
   if (browse) { openData("output", browse.dataset.browse); return; }
+  const gorun = event.target.closest("[data-gorun]");
+  if (gorun) { goToRun(gorun.dataset.gorun); return; }
   const preview = event.target.closest("[data-preview]");
   if (preview) {
     const { preview: run, output } = preview.dataset, info = state.runIndex.get(run);
-    $("#pv-title").textContent = `${OUTPUT_LABEL[output]}${info ? ` · ${ENGINE[info.engine]} · ${datasetTitle(info.dataset)}` : ""}`;
+    $("#pv-title").textContent = `${OUTPUT_LABEL[output]}${info ? ` · ${runName(info.comparison)} · ${ENGINE[info.engine]} · ${datasetTitle(info.dataset)}` : ""}`;
     $("#pv-sub").textContent = output === "quality_report" ? "The whole report" : "The first 3 documents";
     $("#pv-download").href = `/api/runs/${encodeURIComponent(run)}/outputs/${encodeURIComponent(output)}/download`;
     $("#pv-body").textContent = "Loading…";
@@ -1463,7 +1499,25 @@ function pending(id = explorer.dataset) {
 }
 const browsable = () => state.datasets.filter((d) => d.status !== "pending" && Object.keys(d.files).length);
 const runsWithFiles = () => state.comparisons.flatMap((rep) => rep.runs.filter((r) => ["trades", "rejects", "exposures"].some((o) => r.outputs.includes(o)))
-  .map((r) => ({ ...r, dataset_id: rep.comparison.dataset_id, created_at: rep.comparison.created_at })));
+  .map((r) => ({ ...r, comparison: rep.comparison, dataset_id: rep.comparison.dataset_id, created_at: rep.comparison.created_at })));
+// one line that says exactly which run the documents below came from
+function runContext(run) {
+  const c = run.comparison, bench = benchOf(c);
+  const parts = [`<b>${esc(runName(c))} · ${esc(ENGINE[run.engine])}</b> on ${esc(datasetTitle(c.dataset_id))}`, `started ${esc(stamp(c.created_at))}`,
+    bench ? `part of ${esc(benchName(bench))}` : "", esc(c.source_format), `rules v${c.rules_version}`, esc(filterText(c.params) || "no filters")].filter(Boolean);
+  const gone = ["trades", "rejects"].filter((o) => !run.outputs.includes(o));
+  const note = gone.length && bench?.discard_outputs
+    ? `<span class="muted">The ${gone.map((o) => OUTPUT_LABEL[o].toLowerCase()).join(" and ")} file${gone.length > 1 ? "s were" : " was"} deleted after this run, because the benchmark had "Keep output files" off.</span>` : "";
+  return `<span>${parts.join(" · ")}</span><button type="button" class="btn small link" data-gorun="${esc(c.comparison_id)}">Open run</button>${note}`;
+}
+function goToRun(comparisonId) {
+  const c = state.comparisonsById.get(comparisonId);
+  if (!c) return;
+  const [kind, id, hash] = c.benchmark_id ? ["bench", c.benchmark_id, "benchmarks"] : ["runs", comparisonId, "runs"];
+  touched[kind] = true; expanded[kind].add(id);
+  if (location.hash === `#${hash}`) (kind === "runs" ? renderRuns : renderBenchmarks)(); else location.hash = hash;
+  requestAnimationFrame(() => document.querySelector(`[data-row="${kind}"][data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "start" }));
+}
 
 function renderExplorerPickers() {
   const sets = browsable();
@@ -1480,10 +1534,12 @@ function renderExplorerPickers() {
   const runs = runsWithFiles();
   if (!explorer.run || !runs.some((r) => r.run_id === explorer.run)) explorer.run = runs[0]?.run_id ?? null;
   $("#o-run").innerHTML = runs.length
-    ? runs.map((r) => `<option value="${esc(r.run_id)}">${esc(ENGINE[r.engine])} · ${esc(datasetTitle(r.dataset_id))} · ${esc(ago(r.created_at))}</option>`).join("")
+    ? runs.map((r) => `<option value="${esc(r.run_id)}">${esc(runName(r.comparison))} · ${esc(ENGINE[r.engine])} · ${esc(datasetTitle(r.dataset_id))} · ${esc(stamp(r.created_at))}</option>`).join("")
     : `<option value="">No runs with output files</option>`;
   if (explorer.run) $("#o-run").value = explorer.run;
   const run = runs.find((r) => r.run_id === explorer.run);
+  $("#o-context").innerHTML = run ? runContext(run) : "";
+  $("#o-context").hidden = !run;
   const counts = { trades: run?.quality?.output_rows, rejects: run?.quality?.rejected_rows, exposures: run?.quality?.exposure_groups };
   const outs = ["trades", "rejects", "exposures"].filter((o) => run?.outputs.includes(o));
   if (run && !outs.includes(explorer.output)) explorer.output = outs[0];

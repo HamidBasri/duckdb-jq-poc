@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from app.application.explorer import ExplorerService
 from app.application.messaging import EventBus, TaskSupervisor
 from app.application.orchestrators import BenchmarkOrchestrator, ComparisonOrchestrator, DatasetOrchestrator
-from app.application.projections import Repositories, StateProjector, recover_interrupted
+from app.application.projections import Repositories, StateProjector, number_unnumbered, recover_interrupted
 from app.application.queries import ReportQueries
 from app.application.services import (
     BenchmarkService,
@@ -18,7 +18,7 @@ from app.application.services import (
 from app.application.tracking import RowTrackingService
 from app.config import Settings
 from app.domain.events import DomainEvent
-from app.domain.models import Benchmark, Comparison, DatasetManifest, PipelineRun, RuleSet
+from app.domain.models import Benchmark, Comparison, Counter, DatasetManifest, PipelineRun, RuleSet
 from app.infrastructure.column_reader import DuckDbColumnReader
 from app.infrastructure.data_browser import DuckDbDataBrowser
 from app.infrastructure.jobs import WORKER_JOBS
@@ -79,8 +79,10 @@ def build_container(settings: Settings) -> Container:
             settings.state_dir / "benchmarks", Benchmark, lambda record: record.benchmark_id
         ),
         rules=JsonFileRepository(settings.state_dir / "rules", RuleSet, lambda record: str(record.version)),
+        counters=JsonFileRepository(settings.state_dir / "counters", Counter, lambda record: record.name),
     )
     recover_interrupted(repositories)
+    number_unnumbered(repositories)
 
     bus = EventBus()
     supervisor = TaskSupervisor()

@@ -309,7 +309,7 @@ async function loadRuns(keepSelection = true) {
   view.runs = await api("/api/runs");
   const select = $("#run-select");
   select.innerHTML = view.runs.length
-    ? view.runs.map((r) => `<option value="${esc(r.run_id)}">${esc(r.engine)} · ${esc(r.dataset_id)} · ${esc(fmtDate(r.created_at))}${r.status !== "succeeded" ? " · " + esc(r.status) : ""}</option>`).join("")
+    ? view.runs.map((r) => `<option value="${esc(r.run_id)}">${r.number ? `Run ${r.number} · ` : ""}${esc(r.engine)} · ${esc(r.dataset_id)} · ${esc(fmtDate(r.created_at))}${r.status !== "succeeded" ? " · " + esc(r.status) : ""}</option>`).join("")
     : `<option value="">No runs yet</option>`;
   const wanted = keepSelection && view.runs.some((r) => r.run_id === view.runId) ? view.runId : view.runs.find((r) => r.tracking)?.run_id ?? view.runs[0]?.run_id ?? null;
   if (wanted) select.value = wanted;
@@ -334,7 +334,7 @@ function renderRun() {
   $("#run-card").innerHTML = `
     <div class="run-head">
       <span class="engine ${esc(r.engine)}">${esc(r.engine)}</span>
-      <h2>${esc(r.dataset_id)}</h2>
+      <h2>${r.number ? `Run ${r.number} · ` : ""}${esc(r.dataset_id)}</h2>
       ${pill(r.status, r.status)}
       <span class="muted mono">${esc(r.run_id)}</span>
     </div>
