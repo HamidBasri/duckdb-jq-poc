@@ -123,6 +123,28 @@ def breakers(tmp_path_factory: pytest.TempPathFactory) -> EngineRunner:
     return EngineRunner(manifest, dataset_dir, root / "runs")
 
 
+def test_a_currency_without_a_usable_rate_is_rejected_by_both(tmp_path: Path) -> None:
+    """A rate that isn't a positive number used to crash jq while DuckDB delivered empty amounts."""
+    dataset_dir = tmp_path / "dataset"
+    dataset_dir.mkdir()
+    for entity, content in CSV_FILES.items():
+        if entity is Entity.FX_RATES:
+            content = "currency,rate_to_usd\nUSD,abc\nEUR,0\n"
+        (dataset_dir / f"{entity}.csv").write_text(content)
+    manifest = DatasetManifest(
+        dataset_id="bad-rates",
+        origin="uploaded",
+        status=DatasetStatus.READY,
+        files={entity: {SourceFormat.CSV: f"{entity}.csv"} for entity in CSV_FILES},
+    )
+    run = EngineRunner(manifest, dataset_dir, tmp_path / "runs")
+    duck, jq = run(Engine.DUCKDB, SourceFormat.CSV), run(Engine.JQ, SourceFormat.CSV)
+    result = verify_outputs(Engine.DUCKDB, duck.outputs, Engine.JQ, jq.outputs, 1_000_000, 1_000_000)
+    assert result.equivalent, result.model_dump()
+    assert duck.quality is not None and duck.quality["output_rows"] == 0
+    assert duck.quality["error_counts"]["E_CURRENCY_UNKNOWN"] == duck.quality["clean_rows"]
+
+
 @pytest.mark.parametrize("code", SWITCHABLE)
 def test_engines_agree_with_a_rule_switched_off(breakers: EngineRunner, code: ErrorCode) -> None:
     """Switching a reject rule off must not crash either engine or make them disagree."""

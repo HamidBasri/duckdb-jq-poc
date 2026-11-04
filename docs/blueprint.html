@@ -1045,7 +1045,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
       <tr><td><code>E_SIDE_INVALID</code></td><td>validate</td><td>Side is not BUY or SELL after cleaning</td><td><span class="tag ok">Yes</span></td></tr>
       <tr><td><code>E_QUANTITY_INVALID</code></td><td>validate</td><td>Quantity missing, zero or negative</td><td><span class="tag">No</span> The amount is quantity times price; without a quantity it can't be calculated.</td></tr>
       <tr><td><code>E_PRICE_INVALID</code></td><td>validate</td><td>Price missing, zero or negative</td><td><span class="tag">No</span> Same reason: no price, no amount.</td></tr>
-      <tr><td><code>E_CURRENCY_UNKNOWN</code></td><td>validate</td><td>Currency not in fx_rates</td><td><span class="tag">No</span> The amount can't be converted to US dollars.</td></tr>
+      <tr><td><code>E_CURRENCY_UNKNOWN</code></td><td>validate</td><td>Currency not in fx_rates, or its rate is not a positive number</td><td><span class="tag">No</span> The amount can't be converted to US dollars.</td></tr>
       <tr><td><code>E_INSTRUMENT_UNRESOLVED</code></td><td>validate</td><td>instrument_id not in instruments</td><td><span class="tag">No</span> The output document is built around the instrument.</td></tr>
       <tr><td><code>E_COUNTERPARTY_UNRESOLVED</code></td><td>validate</td><td>counterparty_id not in counterparties</td><td><span class="tag">No</span> Exposure is grouped by the counterparty's parent company.</td></tr>
       <tr><td><code>E_BOOK_UNRESOLVED</code></td><td>validate</td><td>book_id not in books</td><td><span class="tag">No</span> The output document needs the book it was traded in.</td></tr>

@@ -21,7 +21,10 @@ include "lib";
       if .side == null then "E_SIDE_INVALID" else empty end,
       if .quantity == null or .quantity <= 0 then "E_QUANTITY_INVALID" else empty end,
       if .price == null or .price <= 0 then "E_PRICE_INVALID" else empty end,
-      if .currency | known($known_currencies) | not then "E_CURRENCY_UNKNOWN" else empty end,
+      # a currency whose rate is not a positive number can't be converted either
+      if (.currency | known($known_currencies) | not)
+         or ($known_currencies[.currency].rate_to_usd | . == null or . <= 0)
+        then "E_CURRENCY_UNKNOWN" else empty end,
       if .instrument_id | known($known_instruments) | not then "E_INSTRUMENT_UNRESOLVED" else empty end,
       if .counterparty_id | known($known_counterparties) | not then "E_COUNTERPARTY_UNRESOLVED" else empty end,
       if .book_id | known($known_books) | not then "E_BOOK_UNRESOLVED" else empty end,

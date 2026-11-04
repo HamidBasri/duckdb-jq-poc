@@ -57,7 +57,7 @@ RULE_TEXT: dict[str, str] = {
     "E_SIDE_INVALID": "Side is not BUY or SELL after cleaning",
     "E_QUANTITY_INVALID": "Quantity missing, zero or negative",
     "E_PRICE_INVALID": "Price missing, zero or negative",
-    "E_CURRENCY_UNKNOWN": "Currency not in fx_rates",
+    "E_CURRENCY_UNKNOWN": "Currency not in fx_rates, or its rate is not a positive number",
     "E_INSTRUMENT_UNRESOLVED": "Instrument not in instruments",
     "E_COUNTERPARTY_UNRESOLVED": "Counterparty not in counterparties",
     "E_BOOK_UNRESOLVED": "Book not in books",

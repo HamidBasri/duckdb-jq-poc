@@ -12,7 +12,8 @@ SELECT
         CASE WHEN t.side IS NULL THEN 'E_SIDE_INVALID' END,
         CASE WHEN t.quantity IS NULL OR t.quantity <= 0 THEN 'E_QUANTITY_INVALID' END,
         CASE WHEN t.price IS NULL OR t.price <= 0 THEN 'E_PRICE_INVALID' END,
-        CASE WHEN fx.currency IS NULL THEN 'E_CURRENCY_UNKNOWN' END,
+        -- a currency whose rate is not a positive number can't be converted either
+        CASE WHEN fx.currency IS NULL OR fx.rate_to_usd IS NULL OR fx.rate_to_usd <= 0 THEN 'E_CURRENCY_UNKNOWN' END,
         CASE WHEN i.instrument_id IS NULL THEN 'E_INSTRUMENT_UNRESOLVED' END,
         CASE WHEN c.counterparty_id IS NULL THEN 'E_COUNTERPARTY_UNRESOLVED' END,
         CASE WHEN b.book_id IS NULL THEN 'E_BOOK_UNRESOLVED' END,
