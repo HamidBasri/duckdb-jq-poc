@@ -1,6 +1,6 @@
 """Abstract ports. Application code depends on these, never on concrete adapters."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, Self
@@ -9,7 +9,9 @@ from pydantic import BaseModel
 
 from app.domain.events import DomainEvent
 from app.domain.models import (
+    CorrectionRule,
     DatasetManifest,
+    DocumentPage,
     Engine,
     Entity,
     GeneratedDataset,
@@ -18,9 +20,11 @@ from app.domain.models import (
     RowState,
     RowStatus,
     RowTrackingSummary,
+    RuleSet,
     RunOutcome,
     SourceFormat,
     Stage,
+    TablePage,
     TransformParams,
     VerificationResult,
 )
@@ -43,6 +47,7 @@ class Repository[ModelT: BaseModel](Protocol):
     def get(self, key: str) -> ModelT | None: ...
     def save(self, record: ModelT) -> None: ...
     def list(self) -> list[ModelT]: ...
+    def delete(self, key: str) -> None: ...
 
 
 class JobExecutor(Protocol):
@@ -63,6 +68,7 @@ class RunContext:
     params: TransformParams
     work_dir: Path
     output_dir: Path
+    rules: RuleSet = field(default_factory=RuleSet)
 
     def output_path(self, name: OutputName) -> Path:
         suffix = {OutputName.QUALITY_REPORT: "json", OutputName.ROW_STATUS: "parquet"}.get(name, "ndjson")
@@ -100,6 +106,23 @@ class StageMonitor(Protocol):
     def __exit__(self, *exc_info: object) -> None: ...
 
 
+class ColumnReader(Protocol):
+    """Reads a source file's column names and its first few rows, as text."""
+
+    def read(
+        self, path: Path, fmt: SourceFormat, sample_rows: int
+    ) -> tuple[list[str], list[list[str | None]]]: ...
+
+
+class DataBrowser(Protocol):
+    """Pages through source files and NDJSON outputs for the data explorer."""
+
+    def table_page(
+        self, path: Path, fmt: SourceFormat, offset: int, limit: int, search: str | None
+    ) -> TablePage: ...
+    def document_page(self, path: Path, offset: int, limit: int, search: str | None) -> DocumentPage: ...
+
+
 class RowStatusReader(Protocol):
     """Read side of the per-row status table (and the files it points into)."""
 
@@ -112,13 +135,14 @@ class RowStatusReader(Protocol):
         source: Path,
         fmt: SourceFormat,
         rejects: Path,
+        rules: Sequence[CorrectionRule],
         state: RowState | None,
         search: str | None,
         limit: int,
         offset: int,
     ) -> tuple[int, list[RowStatus]]: ...
     def get_reject(
-        self, source: Path, fmt: SourceFormat, rejects: Path, source_row: int
+        self, source: Path, fmt: SourceFormat, rejects: Path, rules: Sequence[CorrectionRule], source_row: int
     ) -> RowStatus | None: ...
     def source_record(self, path: Path, fmt: SourceFormat, source_row: int) -> dict[str, Any] | None: ...
     def output_document(self, path: Path, byte_offset: int) -> dict[str, Any]: ...
@@ -139,6 +163,9 @@ class WorkerJobs:
 
     generate_dataset: Callable[[GenerationSpec, Path], GeneratedDataset]
     inspect_upload: Callable[[DatasetManifest, Path], dict[Entity, int]]
+    derive_dataset: Callable[
+        [DatasetManifest, Path, Path, DatasetManifest], dict[Entity, dict[SourceFormat, str]]
+    ]
     run_pipeline: Callable[[RunContext, "EngineSettings", EventSink], RunOutcome]
     verify: Callable[
         [Engine, dict[OutputName, str], Engine, dict[OutputName, str], int, int], VerificationResult

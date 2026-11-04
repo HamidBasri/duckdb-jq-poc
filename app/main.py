@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request, status
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.api.routes import benchmarks, comparisons, datasets, events, tracking
+from app.api.routes import benchmarks, comparisons, datasets, events, rules, tracking
 from app.application.services import ConflictError, NotFoundError
 from app.bootstrap import build_container
 from app.config import get_settings
@@ -43,7 +43,15 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
-    for router in (datasets.router, comparisons.router, benchmarks.router, events.router, tracking.router):
+    routers = (
+        datasets.router,
+        comparisons.router,
+        benchmarks.router,
+        rules.router,
+        events.router,
+        tracking.router,
+    )
+    for router in routers:
         app.include_router(router)
     app.add_exception_handler(NotFoundError, _error(status.HTTP_404_NOT_FOUND))  # type: ignore[arg-type]
     app.add_exception_handler(ConflictError, _error(status.HTTP_409_CONFLICT))  # type: ignore[arg-type]

@@ -24,6 +24,12 @@ async def request_benchmark(request: BenchmarkRequest, container: ContainerDep) 
     return container.reports.benchmark(benchmark)
 
 
+@router.delete("/{benchmark_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_benchmark(benchmark_id: str, container: ContainerDep) -> None:
+    """Delete a finished benchmark with all its runs."""
+    await container.history.delete_benchmark(benchmark_id)
+
+
 @router.get("")
 async def list_benchmarks(container: ContainerDep) -> list[BenchmarkReport]:
     return [container.reports.benchmark(benchmark) for benchmark in container.benchmarks.list_all()]

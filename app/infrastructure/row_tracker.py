@@ -8,15 +8,24 @@ reads files, so it works the same for both engines.
 import json
 import re
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import duckdb
 import pyarrow as pa
 
-from app.domain.models import Entity, OutputName, RowState, RowStatus, RowTrackingSummary, SourceFormat
+from app.domain.models import (
+    CorrectionRule,
+    Entity,
+    OutputName,
+    RowState,
+    RowStatus,
+    RowTrackingSummary,
+    SourceFormat,
+)
 from app.domain.ports import RunContext
-from app.engines.sources import quote_literal
+from app.engines.sources import corrected_sql, numbered_reader_sql, quote_literal
 
 TRADE_ID_PATTERN = re.compile(rb'"trade_id":"((?:[^"\\]|\\.)*)"')
 READ_CHUNK_LINES = 1 << 16
@@ -30,19 +39,9 @@ _TRADE_COLUMNS = (
 )
 
 
-def _numbered_source_sql(path: Path, fmt: SourceFormat) -> str:
-    """Raw trade rows with their 1-based position in the file."""
-    literal = quote_literal(path)
-    if fmt is SourceFormat.PARQUET:
-        return (
-            "SELECT file_row_number + 1 AS source_row, * EXCLUDE (file_row_number) "
-            f"FROM read_parquet({literal}, file_row_number = true)"
-        )
-    # CSV has no row-number column; insertion order is preserved, so row_number() follows the file.
-    return (
-        "SELECT row_number() OVER () AS source_row, * "
-        f"FROM read_csv({literal}, header = true, all_varchar = true)"
-    )
+def _trade_id_sql(rules: Sequence[CorrectionRule]) -> str:
+    """The trade id the engines saw: correction rules applied, then trimmed, blank as NULL."""
+    return f"nullif(trim({corrected_sql('trade_id', rules)}), '')"
 
 
 def _output_offsets(trades: Path) -> pa.Table:
@@ -72,10 +71,9 @@ def build_row_status(ctx: RunContext, outputs: dict[OutputName, str]) -> RowTrac
     with duckdb.connect() as con:
         con.execute("SET enable_progress_bar = false")
         con.register("output_offsets", offsets)
-        con.execute(
-            f"CREATE TABLE raw AS SELECT source_row, nullif(trim(trade_id), '') AS trade_id "
-            f"FROM ({_numbered_source_sql(*source)})"
-        )
+        trade_id = _trade_id_sql(ctx.rules.corrections_for(Entity.TRADES))
+        rows = numbered_reader_sql(*source)
+        con.execute(f"CREATE TABLE raw AS SELECT source_row, {trade_id} AS trade_id FROM ({rows})")
         con.execute(
             f"CREATE TABLE rejects AS SELECT * FROM read_json({quote_literal(outputs[OutputName.REJECTS])}, "
             f"format = 'newline_delimited', columns = {_REJECT_COLUMNS})"
@@ -146,7 +144,9 @@ def build_row_status(ctx: RunContext, outputs: dict[OutputName, str]) -> RowTrac
     )
 
 
-def _rejects_so_far_sql(source: Path, fmt: SourceFormat, rejects: Path) -> str:
+def _rejects_so_far_sql(
+    source: Path, fmt: SourceFormat, rejects: Path, rules: Sequence[CorrectionRule]
+) -> str:
     """Row statuses for the rejected rows only, from the source file and the rejects file.
 
     Validate writes the rejects file before transform starts, so this works while a run is still
@@ -154,8 +154,8 @@ def _rejects_so_far_sql(source: Path, fmt: SourceFormat, rejects: Path) -> str:
     """
     return f"""
         WITH raw AS (
-            SELECT source_row, nullif(trim(trade_id), '') AS trade_id
-            FROM ({_numbered_source_sql(source, fmt)})
+            SELECT source_row, {_trade_id_sql(rules)} AS trade_id
+            FROM ({numbered_reader_sql(source, fmt)})
         ), first_rows AS (
             SELECT trade_id, min(source_row) AS source_row
             FROM raw WHERE trade_id IS NOT NULL GROUP BY trade_id
@@ -191,22 +191,24 @@ class DuckDbRowStatusReader:
         source: Path,
         fmt: SourceFormat,
         rejects: Path,
+        rules: Sequence[CorrectionRule],
         state: RowState | None,
         search: str | None,
         limit: int,
         offset: int,
     ) -> tuple[int, list[RowStatus]]:
-        return _find(f"({_rejects_so_far_sql(source, fmt, rejects)})", state, search, limit, offset)
+        return _find(f"({_rejects_so_far_sql(source, fmt, rejects, rules)})", state, search, limit, offset)
 
-    def get_reject(self, source: Path, fmt: SourceFormat, rejects: Path, source_row: int) -> RowStatus | None:
-        return _get(f"({_rejects_so_far_sql(source, fmt, rejects)})", source_row)
+    def get_reject(
+        self, source: Path, fmt: SourceFormat, rejects: Path, rules: Sequence[CorrectionRule], source_row: int
+    ) -> RowStatus | None:
+        return _get(f"({_rejects_so_far_sql(source, fmt, rejects, rules)})", source_row)
 
     def source_record(self, path: Path, fmt: SourceFormat, source_row: int) -> dict[str, Any] | None:
         with duckdb.connect() as con:
             con.execute("SET enable_progress_bar = false")
             cursor = con.execute(
-                f"SELECT * EXCLUDE (source_row) FROM ({_numbered_source_sql(path, fmt)}) "
-                "WHERE source_row = ?",
+                f"SELECT * EXCLUDE (source_row) FROM ({numbered_reader_sql(path, fmt)}) WHERE source_row = ?",
                 [source_row],
             )
             rows = _records(cursor)

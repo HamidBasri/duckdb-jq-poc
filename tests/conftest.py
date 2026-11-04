@@ -13,6 +13,7 @@ from app.domain.models import (
     Entity,
     GenerationSpec,
     OutputName,
+    RuleSet,
     RunOutcome,
     SourceFormat,
     TransformParams,
@@ -59,6 +60,7 @@ class EngineRunner:
         tag: str = "",
         settings: EngineSettings | None = None,
         check: bool = True,
+        rules: RuleSet | None = None,
     ) -> RunOutcome:
         run_dir = self.run_dir(engine, source_format, tag)
         ctx = RunContext(
@@ -70,6 +72,7 @@ class EngineRunner:
             params=params or TransformParams(),
             work_dir=run_dir / "work",
             output_dir=run_dir / "output",
+            rules=rules or RuleSet(),
         )
         outcome = run_pipeline_job(ctx, settings or EngineSettings(), ListSink())
         if check:

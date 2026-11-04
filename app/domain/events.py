@@ -54,6 +54,12 @@ class DatasetFailed(DomainEvent):
     error: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class DatasetVersionRequested(DomainEvent):
+    dataset_id: str
+    parent_id: str
+
+
 # --- pipeline runs (emitted from worker processes) --------------------------------------
 @dataclass(frozen=True, kw_only=True)
 class RunStarted(DomainEvent):
@@ -124,3 +130,19 @@ class BenchmarkProgressed(DomainEvent):
 class BenchmarkCompleted(DomainEvent):
     benchmark_id: str
     error: str | None = None
+
+
+# --- housekeeping -------------------------------------------------------------------------
+@dataclass(frozen=True, kw_only=True)
+class RecordsDeleted(DomainEvent):
+    """Records removed by a user; listeners only need to refresh."""
+
+    kind: str  # "dataset" | "comparison" | "benchmark" | "history"
+    ids: list[str]
+
+
+@dataclass(frozen=True, kw_only=True)
+class RulesChanged(DomainEvent):
+    """A new rule set version was saved; runs started from now on use it."""
+
+    version: int

@@ -59,7 +59,8 @@ class JqEngine:
                 target = self._raw_path(entity)
                 source = ctx.dataset.source_path(ctx.dataset_dir, entity, ctx.source_format)
                 adapter.execute(
-                    f"COPY ({source_select_sql(entity, source)}) TO {quote_literal(target)} (FORMAT json)"
+                    f"COPY ({source_select_sql(entity, source, ctx.rules.corrections_for(entity))}) "
+                    f"TO {quote_literal(target)} (FORMAT json)"
                 )
                 raw_rows[entity] = count_lines(target)
         return StageResult(
@@ -104,6 +105,7 @@ class JqEngine:
             validated,
             [trades],
             slurpfiles={"trade_ids": trade_ids, **self._reference_slurpfiles()},
+            json_args={"disabled_rules": ctx.rules.disabled_rules},
         )
         rejects = ctx.output_path(OutputName.REJECTS)
         self._runner.run("rejects.jq", rejects, [validated])

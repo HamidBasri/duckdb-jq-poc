@@ -21,6 +21,7 @@ from app.domain.events import (
     DatasetGenerationRequested,
     DatasetReady,
     DatasetUploaded,
+    DatasetVersionRequested,
     OutputsDiscarded,
     RunFinished,
     VerificationStarted,
@@ -31,6 +32,7 @@ from app.domain.models import (
     GenerationSpec,
     OutputName,
     PipelineRun,
+    RuleSet,
     RunOutcome,
     RunStatus,
     SourceFormat,
@@ -66,6 +68,7 @@ class DatasetOrchestrator:
     def register(self) -> None:
         self._bus.subscribe(DatasetGenerationRequested, self._on_generation_requested)
         self._bus.subscribe(DatasetUploaded, self._on_uploaded)
+        self._bus.subscribe(DatasetVersionRequested, self._on_version_requested)
 
     async def ensure_ready(self, spec: GenerationSpec) -> DatasetManifest:
         """Generate the dataset for `spec` unless it exists, and wait for it to settle."""
@@ -79,6 +82,9 @@ class DatasetOrchestrator:
 
     async def _on_uploaded(self, event: DatasetUploaded) -> None:
         self._track(event.dataset_id, self._inspect(event.dataset_id))
+
+    async def _on_version_requested(self, event: DatasetVersionRequested) -> None:
+        self._track(event.dataset_id, self._build_version(event.dataset_id, event.parent_id))
 
     def _track(self, dataset_id: str, work: Coroutine[Any, Any, None]) -> None:
         task = self._supervisor.spawn(work, name=f"dataset:{dataset_id}")
@@ -104,6 +110,25 @@ class DatasetOrchestrator:
                 seconds=round(written.seconds, 3),
             )
         )
+
+    async def _build_version(self, dataset_id: str, parent_id: str) -> None:
+        """Write the new version in a worker, then check it like any upload."""
+        try:
+            manifest, parent = self._datasets.get(dataset_id), self._datasets.get(parent_id)
+            files = await self._executor.submit(
+                self._jobs.derive_dataset,
+                parent,
+                self._settings.datasets_dir / parent_id,
+                self._settings.datasets_dir / dataset_id,
+                manifest,
+            )
+        except Exception as exc:
+            logger.exception("version %s failed", dataset_id)
+            await self._bus.publish(DatasetFailed(dataset_id=dataset_id, error=str(exc)))
+            return
+        manifest.files = files
+        self._repos.datasets.save(manifest)
+        await self._inspect(dataset_id)
 
     async def _inspect(self, dataset_id: str) -> None:
         manifest = self._datasets.get(dataset_id)
@@ -205,6 +230,7 @@ class ComparisonOrchestrator:
                 params=run.params,
                 work_dir=run_dir / "work",
                 output_dir=run_dir / "output",
+                rules=run.rules or RuleSet(),
             )
             try:
                 outcome = await self._executor.submit(

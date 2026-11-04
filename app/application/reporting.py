@@ -47,6 +47,7 @@ class ComparisonReport(BaseModel):
 
 class BenchmarkRow(BaseModel):
     dataset_id: str
+    run_id: str
     rows: int
     engine: Engine
     status: RunStatus
@@ -153,6 +154,7 @@ def build_benchmark_report(
             table.append(
                 BenchmarkRow(
                     dataset_id=comparison.dataset_id,
+                    run_id=run.run_id,
                     rows=raw_rows,
                     engine=run.engine,
                     status=run.status,

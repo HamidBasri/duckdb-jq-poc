@@ -17,8 +17,9 @@ SELECT
         CASE WHEN c.counterparty_id IS NULL THEN 'E_COUNTERPARTY_UNRESOLVED' END,
         CASE WHEN b.book_id IS NULL THEN 'E_BOOK_UNRESOLVED' END,
         CASE WHEN t.previous_trade_id IS NOT NULL AND p.trade_id IS NULL THEN 'E_PREVIOUS_TRADE_UNRESOLVED' END
-    ], e -> e IS NOT NULL) AS errors
+    ], e -> e IS NOT NULL AND NOT list_contains(r.disabled_rules, e)) AS errors
 FROM clean_trades t
+CROSS JOIN run_rules r  -- rules switched off on the Rules page never reject
 LEFT JOIN clean_fx_rates fx ON fx.currency = t.currency
 LEFT JOIN clean_instruments i ON i.instrument_id = t.instrument_id
 LEFT JOIN clean_counterparties c ON c.counterparty_id = t.counterparty_id

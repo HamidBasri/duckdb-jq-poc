@@ -11,7 +11,8 @@ from fastapi.responses import FileResponse
 from app.api.deps import ContainerDep
 from app.api.schemas import ComparisonRequest
 from app.application.reporting import ComparisonReport
-from app.domain.models import OutputName, PipelineRun
+from app.application.services import HistoryCleared
+from app.domain.models import DocumentPage, OutputName, PipelineRun
 
 router = APIRouter(prefix="/api", tags=["comparisons"])
 
@@ -46,6 +47,31 @@ async def list_comparisons(container: ContainerDep) -> list[ComparisonReport]:
 @router.get("/comparisons/{comparison_id}")
 async def get_comparison(comparison_id: str, container: ContainerDep) -> ComparisonReport:
     return container.reports.comparison(container.comparisons.get(comparison_id))
+
+
+@router.delete("/comparisons/{comparison_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_comparison(comparison_id: str, container: ContainerDep) -> None:
+    """Delete a finished run and its output files."""
+    await container.history.delete_comparison(comparison_id)
+
+
+@router.delete("/history")
+async def clear_history(container: ContainerDep) -> HistoryCleared:
+    """Delete every finished run and benchmark. Datasets and anything still running are kept."""
+    return await container.history.clear()
+
+
+@router.get("/runs/{run_id}/outputs/{name}/page")
+async def output_page(
+    run_id: str,
+    name: OutputName,
+    container: ContainerDep,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=MAX_PREVIEW_ROWS),
+    q: str | None = Query(None, description="Text found anywhere in the document"),
+) -> DocumentPage:
+    """A page of a run's trades, rejects or exposures, with the total, for the data explorer."""
+    return await container.explorer.output(run_id, name, offset, limit, q)
 
 
 @router.get("/runs/{run_id}")

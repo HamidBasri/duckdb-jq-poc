@@ -25,6 +25,7 @@ from app.domain.models import (
     DatasetManifest,
     DatasetStatus,
     PipelineRun,
+    RuleSet,
     RunStatus,
     utc_now,
 )
@@ -39,6 +40,7 @@ class Repositories:
     runs: Repository[PipelineRun]
     comparisons: Repository[Comparison]
     benchmarks: Repository[Benchmark]
+    rules: Repository[RuleSet]
 
 
 class StateProjector:

@@ -2,7 +2,17 @@
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.domain.models import SIZE_PRESETS, Engine, GenerationSpec, SourceFormat, TransformParams
+from app.domain.models import (
+    SIZE_PRESETS,
+    CellEdit,
+    ColumnMapping,
+    CorrectionRule,
+    Engine,
+    GenerationSpec,
+    RowRef,
+    SourceFormat,
+    TransformParams,
+)
 
 DEFAULT_ENGINES = [Engine.DUCKDB, Engine.JQ]
 
@@ -17,6 +27,21 @@ def parse_size(value: str | int) -> int:
     if label.isdigit():
         return int(label)
     raise ValueError(f"unknown size {value!r}; use one of {', '.join(SIZE_PRESETS)} or a row count")
+
+
+class EditRequest(BaseModel):
+    edits: list[CellEdit] = Field(default_factory=list)
+    deleted_rows: list[RowRef] = Field(default_factory=list)
+
+
+class RulesUpdate(BaseModel):
+    corrections: list[CorrectionRule] = Field(default_factory=list)
+    disabled_rules: list[str] = Field(default_factory=list)
+    note: str = ""
+
+
+class VersionRequest(BaseModel):
+    mapping: ColumnMapping = Field(default_factory=dict)
 
 
 class GenerateRequest(GenerationSpec):

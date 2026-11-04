@@ -105,12 +105,12 @@ def test_rejects_so_far_match_the_final_row_table(
         Path(outcome.outputs[OutputName.ROW_STATUS]), RowState.REJECTED, None, 10_000, 0
     )
     early_total, early = READER.find_rejects(
-        *generated.source(source_format), Path(outcome.outputs[OutputName.REJECTS]), None, None, 10_000, 0
+        *generated.source(source_format), Path(outcome.outputs[OutputName.REJECTS]), [], None, None, 10_000, 0
     )
     assert final_total > 0 and early_total == final_total
     assert [row.model_dump() for row in early] == [row.model_dump() for row in final]
     first = READER.get_reject(
-        *generated.source(source_format), Path(outcome.outputs[OutputName.REJECTS]), early[0].source_row
+        *generated.source(source_format), Path(outcome.outputs[OutputName.REJECTS]), [], early[0].source_row
     )
     assert first == early[0]
 

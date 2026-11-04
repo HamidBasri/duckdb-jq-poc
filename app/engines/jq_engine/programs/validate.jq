@@ -1,4 +1,5 @@
 # Second validation pass (streaming). Rule order matches duckdb_engine/sql/validate.sql.
+# $disabled_rules: error codes switched off (--argjson).
 include "lib";
 
 ($trade_ids[0]) as $known_trades
@@ -27,4 +28,5 @@ include "lib";
       if .previous_trade_id != null and (.previous_trade_id | known($known_trades) | not)
         then "E_PREVIOUS_TRADE_UNRESOLVED" else empty end
     ]
+    | map(select(IN($disabled_rules[]) | not))   # rules switched off on the Rules page never reject
   }

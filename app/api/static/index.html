@@ -2,343 +2,1802 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DuckDB vs jq · Trade Transformation POC</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DuckDB vs jq</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap">
 <style>
-  :root {
-    --bg: #f6f7f9; --panel: #ffffff; --ink: #1d2330; --muted: #667085; --line: #e3e6eb;
-    --duck: #d9a514; --jq: #4f6bd8; --ok: #1f8a4c; --bad: #c2362f; --warn: #b26b00;
-    --ingest: #94a3b8; --clean: #60a5fa; --validate: #a78bfa; --transform: #f59e0b; --aggregate: #10b981;
-    color-scheme: light;
+/* Layout: the trade tracker's app shell. Navy top bar with tabs; each tab is a header row with its
+   main action, then compact lists that open on click. Forms live in a side panel, not on the page.
+   Blue is always DuckDB and orange is always jq. */
+:root {
+  --page: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #f3f5f8;
+  --hover: #f0f4fa;
+  --ink: #0f1b2b;
+  --ink-2: #3c4959;
+  --ink-3: #69758a;
+  --line: #e2e7ee;
+  --line-strong: #c3ccd7;
+  --brand: #13294a;
+  --on-brand: #ffffff;
+  --on-brand-2: #b6c3d6;
+  --primary: #13294a;
+  --on-primary: #ffffff;
+  --accent: #2a78d6;
+  --good: #17784a;
+  --good-soft: #e6f4ec;
+  --warn: #a35f00;
+  --warn-soft: #fbf1e0;
+  --bad: #b8392b;
+  --bad-soft: #fbeae8;
+  --muted-soft: #eef1f5;
+  --duck: #2a78d6;
+  --jq: #eb6834;
+  --st-ingest: #8a96a8;
+  --st-clean: #2f9e8f;
+  --st-validate: #8b6fd6;
+  --st-transform: #d9a21b;
+  --st-aggregate: #4a9c5d;
+  --shadow: 0 1px 2px rgb(15 27 43 / 0.05), 0 1px 1px rgb(15 27 43 / 0.03);
+  --shadow-lg: 0 12px 40px rgb(15 27 43 / 0.18);
+  --font-body: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0a0f17; --surface: #111925; --surface-2: #172131; --hover: #182437;
+    --ink: #e7ecf2; --ink-2: #b3becb; --ink-3: #8a97a8; --line: #233042; --line-strong: #3a4a5f;
+    --brand: #0f1f35; --on-brand: #ffffff; --on-brand-2: #9fb0c8; --primary: #3987e5; --on-primary: #ffffff; --accent: #5aa0f0;
+    --good: #4cc38a; --good-soft: #12291f; --warn: #e0a040; --warn-soft: #2d2213; --bad: #ef7466; --bad-soft: #2e1916;
+    --muted-soft: #1b2533; --duck: #4b93ea; --jq: #f07a48;
+    --st-ingest: #8d9bb0; --st-clean: #3bb5a3; --st-validate: #9d84e6; --st-transform: #e3b23a; --st-aggregate: #5db571;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3); --shadow-lg: 0 12px 40px rgb(0 0 0 / 0.5);
   }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #11141a; --panel: #1a1f27; --ink: #e6e9ef; --muted: #98a2b3; --line: #2a313c; color-scheme: dark; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
-  header h1 { font-size: 17px; margin: 0; }
-  header .sub { color: var(--muted); }
-  .live { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); }
-  .dot.on { background: var(--ok); }
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px 20px; max-width: 1500px; margin: 0 auto; }
-  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
-  h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
-  h2 .hint { font-weight: 400; color: var(--muted); font-size: 12.5px; }
-  form { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
-  label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
-  label.inline { flex-direction: row; align-items: center; gap: 5px; color: var(--ink); font-size: 13px; }
-  input, select, button { font: inherit; color: inherit; }
-  input[type=text], input[type=number], input[type=date], select { padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); min-width: 0; }
-  button { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; }
-  button.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
-  button:disabled { opacity: .5; cursor: default; }
-  .table-wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  th { color: var(--muted); font-weight: 500; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11.5px; border: 1px solid currentColor; }
-  .s-ready, .s-succeeded, .s-completed { color: var(--ok); }
-  .s-failed { color: var(--bad); }
-  .s-pending, .s-queued, .s-running, .s-verifying, .s-preparing { color: var(--warn); }
-  .engine-duckdb { color: var(--duck); font-weight: 600; }
-  .engine-jq { color: var(--jq); font-weight: 600; }
-  .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
-  .card-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
-  .card-head .id { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
-  .bars { margin-top: 8px; display: grid; grid-template-columns: 70px minmax(0, 1fr) 210px; gap: 6px 10px; align-items: center; }
-  .bar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; background: var(--bg); }
-  .bar span { display: block; height: 100%; min-width: 1px; }
-  .metrics { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-  .verdict { font-size: 12.5px; margin-top: 6px; }
-  .links a { margin-right: 10px; font-size: 12px; }
-  .err { color: var(--bad); font-size: 12px; white-space: normal; }
-  #log { font-family: ui-monospace, monospace; font-size: 11.5px; max-height: 70vh; overflow-y: auto; }
-  #log div { padding: 3px 0; border-bottom: 1px dashed var(--line); word-break: break-word; }
-  #log b { font-weight: 600; }
-  pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow: auto; max-height: 420px; font-size: 12px; }
-  .muted { color: var(--muted); }
-  details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0a0f17; --surface: #111925; --surface-2: #172131; --hover: #182437;
+  --ink: #e7ecf2; --ink-2: #b3becb; --ink-3: #8a97a8; --line: #233042; --line-strong: #3a4a5f;
+  --brand: #0f1f35; --on-brand: #ffffff; --on-brand-2: #9fb0c8; --primary: #3987e5; --on-primary: #ffffff; --accent: #5aa0f0;
+  --good: #4cc38a; --good-soft: #12291f; --warn: #e0a040; --warn-soft: #2d2213; --bad: #ef7466; --bad-soft: #2e1916;
+  --muted-soft: #1b2533; --duck: #4b93ea; --jq: #f07a48;
+  --st-ingest: #8d9bb0; --st-clean: #3bb5a3; --st-validate: #9d84e6; --st-transform: #e3b23a; --st-aggregate: #5db571;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3); --shadow-lg: 0 12px 40px rgb(0 0 0 / 0.5);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14.5px/1.5 var(--font-body); overflow-x: clip; }
+button, input, select { font: inherit; color: inherit; }
+a { color: var(--accent); text-underline-offset: 2px; }
+code, .mono { font-family: var(--font-mono); font-size: 0.85em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.gutter { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+.muted { color: var(--ink-3); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- top bar ---------- */
+.topbar { background: var(--brand); color: var(--on-brand); position: sticky; top: 0; z-index: 5; padding-top: env(safe-area-inset-top, 0px); }
+.topbar-inner { max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0 28px; min-height: 56px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .logo { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--duck) 50%, var(--jq) 50%); }
+.brand h1 { margin: 0; font-size: 1.02rem; font-weight: 700; letter-spacing: -0.01em; }
+.tabs { display: flex; gap: 2px; margin-right: auto; overflow-x: auto; scrollbar-width: none; align-self: stretch; }
+.tabs a { display: flex; align-items: center; gap: 7px; padding: 0 12px; color: var(--on-brand-2); text-decoration: none; font-size: 0.9rem; font-weight: 500; border-bottom: 2px solid transparent; white-space: nowrap; min-height: 56px; }
+.tabs a:hover { color: var(--on-brand); }
+.tabs a[aria-current="page"] { color: var(--on-brand); border-bottom-color: var(--on-brand); }
+.tabs .count { font-size: 0.7rem; background: rgb(255 255 255 / 0.14); border-radius: 999px; padding: 0 7px; line-height: 1.7; }
+.tabs .count:empty { display: none; }
+.live { display: flex; align-items: center; gap: 6px; color: var(--on-brand-2); font-size: 0.8rem; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--on-brand-2); }
+.dot.on { background: #4cc38a; box-shadow: 0 0 0 3px rgb(76 195 138 / 0.25); }
+.topbar .out { color: var(--on-brand-2); font-size: 0.86rem; text-decoration: none; }
+.topbar .out:hover { color: var(--on-brand); }
+@media (max-width: 900px) { .topbar-inner { padding-block: 10px 0; } .tabs { order: 3; width: 100%; } .tabs a { min-height: 44px; } }
+
+/* ---------- page ---------- */
+.app { max-width: 1240px; margin: 0 auto; padding-block: 28px 72px; }
+.view { display: flex; flex-direction: column; gap: 20px; }
+.page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.page-head h2 { margin: 0; font-size: 1.5rem; letter-spacing: -0.02em; }
+.page-head p { margin: 4px 0 0; color: var(--ink-3); max-width: 68ch; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); min-width: 0; }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.card-head h3 { margin: 0; font-size: 0.98rem; }
+.card-head a, .card-head .muted { font-size: 0.86rem; }
+.card-body { padding: 18px 20px; }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 980px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- buttons ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font-size: 0.9rem; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.btn.primary:hover { filter: brightness(1.12); }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: #ffffff; }
+.btn.small { height: 30px; padding: 0 11px; font-size: 0.84rem; }
+.btn.link { border-color: transparent; background: transparent; color: var(--accent); padding: 0 6px; }
+.btn.link:hover { background: var(--hover); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.ibtn { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--ink-3); cursor: pointer; text-decoration: none; }
+.ibtn:hover { background: var(--hover); color: var(--ink); border-color: var(--line); }
+.ibtn.del:hover { color: var(--bad); background: var(--bad-soft); border-color: transparent; }
+.ibtn[aria-expanded] svg { transition: transform 0.15s; }
+.ibtn[aria-expanded="true"] svg { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .ibtn[aria-expanded] svg { transition: none; } }
+
+/* ---------- pills and tags ---------- */
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; line-height: 1.7; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.tone-good { background: var(--good-soft); color: var(--good); }
+.tone-bad { background: var(--bad-soft); color: var(--bad); }
+.tone-warn { background: var(--warn-soft); color: var(--warn); }
+.tone-muted { background: var(--muted-soft); color: var(--ink-3); }
+.tone-warn.live-pill::before { animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .tone-warn.live-pill::before { animation: none; } }
+.etag { font-weight: 700; font-size: 0.85rem; }
+.etag.duckdb { color: var(--duck); }
+.etag.jq { color: var(--jq); }
+.tag { display: inline-flex; align-items: center; font-size: 0.74rem; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; white-space: nowrap; line-height: 1.6; font-weight: 500; }
+.tag.ver { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+.id { font-family: var(--font-mono); font-size: 0.74rem; color: var(--ink-3); }
+
+/* ---------- overview ---------- */
+.headline { background: var(--brand); color: var(--on-brand); border-radius: 12px; padding: 22px 24px; display: grid; gap: 6px; box-shadow: var(--shadow); }
+.headline .eyebrow { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--on-brand-2); font-weight: 600; }
+.headline .big { font-size: clamp(1.3rem, 2.6vw, 1.8rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; text-wrap: balance; }
+.headline .big .x { color: #ffb48f; }
+.headline p { margin: 0; color: var(--on-brand-2); max-width: 80ch; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 980px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .kpis { grid-template-columns: minmax(0, 1fr); } }
+.kpi { padding: 16px 18px; display: grid; gap: 2px; align-content: start; }
+.kpi .label { font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+.kpi .value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.kpi .sub { font-size: 0.84rem; color: var(--ink-3); }
+.kpi.good .value { color: var(--good); }
+.kpi.bad .value { color: var(--bad); }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .steps { grid-template-columns: minmax(0, 1fr); } }
+.step { padding: 18px 20px; display: grid; gap: 6px; align-content: start; }
+.step .n { width: 26px; height: 26px; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: grid; place-items: center; font-weight: 700; font-size: 0.84rem; }
+.step b { font-size: 0.98rem; }
+.step p { margin: 0; color: var(--ink-2); font-size: 0.9rem; }
+.step .btn { justify-self: start; margin-top: 6px; }
+.running { list-style: none; margin: 0; padding: 0; }
+.running li { padding: 12px 20px; border-bottom: 1px solid var(--line); display: grid; gap: 7px; }
+.running li:last-child { border-bottom: 0; }
+.running .what { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 0.9rem; }
+.progress5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
+.progress5 span { height: 5px; border-radius: 3px; background: var(--surface-2); }
+.progress5 span.done { background: var(--line-strong); }
+.progress5 span.now { background: var(--accent); }
+.empty { padding: 32px 20px; text-align: center; color: var(--ink-3); display: grid; gap: 6px; justify-items: center; }
+.empty b { color: var(--ink-2); font-weight: 600; font-size: 0.98rem; }
+.empty .btn { margin-top: 6px; }
+
+/* ---------- tables ---------- */
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+th { font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; background: var(--surface-2); }
+th:first-child, td:first-child { padding-left: 20px; }
+th:last-child, td:last-child { padding-right: 16px; }
+tbody tr:hover td { background: var(--hover); }
+tbody tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+td .sub { display: block; font-size: 0.77rem; color: var(--ink-3); white-space: normal; }
+td.acts { text-align: right; width: 1%; }
+td.acts > div { display: inline-flex; gap: 2px; align-items: center; }
+tr.child td:first-child { padding-left: 44px; position: relative; }
+tr.child td:first-child::before { content: ""; position: absolute; left: 26px; top: 0; height: 50%; width: 10px; border-left: 1.5px solid var(--line-strong); border-bottom: 1.5px solid var(--line-strong); border-bottom-left-radius: 6px; }
+.dsname { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.show-sm { display: none; }
+@media (max-width: 640px) {
+  th.hide-sm, td.hide-sm { display: none; }
+  .show-sm { display: inline-flex; }
+  #ds-table td:first-child { white-space: normal; padding-right: 4px; }
+  .dsname { flex-wrap: wrap; row-gap: 4px; }
+  td.acts > div { flex-wrap: wrap; justify-content: flex-end; }
+}
+.err-line { display: block; color: var(--bad); font-size: 0.8rem; white-space: normal; max-width: 60ch; }
+
+/* ---------- expandable lists ---------- */
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows-head, .row-main { display: grid; align-items: center; gap: 10px 16px; padding: 0 16px 0 20px; }
+.rows-head { min-height: 38px; font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; background: var(--surface-2); border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; }
+.rows > li { border-bottom: 1px solid var(--line); }
+.rows > li:last-child { border-bottom: 0; }
+.row-main { min-height: 62px; cursor: pointer; }
+.row-main:hover { background: var(--hover); }
+.rows > li:last-child .row-main { border-radius: 0 0 10px 10px; }
+.rows > li.open > .row-main { background: var(--surface-2); border-radius: 0; }
+.run-grid { grid-template-columns: minmax(0, 2.2fr) minmax(70px, 0.8fr) minmax(70px, 0.8fr) minmax(60px, 0.7fr) minmax(70px, 0.7fr) minmax(70px, 0.7fr) 68px; }
+.bench-grid { grid-template-columns: minmax(0, 2.4fr) minmax(80px, 0.7fr) minmax(0, 1.7fr) minmax(70px, 0.7fr) 102px; }
+.cell-title { display: grid; min-width: 0; gap: 1px; }
+.cell-title b { font-weight: 600; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cell-title small { color: var(--ink-3); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-r { text-align: right; font-variant-numeric: tabular-nums; }
+.cell-acts { display: flex; gap: 2px; justify-content: flex-end; }
+@media (max-width: 760px) {
+  .rows-head { display: none; }
+  .run-grid, .bench-grid { grid-template-columns: minmax(0, 1fr) auto; padding-block: 10px; }
+  .run-grid > .hide-sm, .bench-grid > .hide-sm { display: none; }
+}
+.detail { padding: 18px 20px 20px; display: grid; gap: 16px; border-top: 1px solid var(--line); }
+.erows { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(150px, auto); gap: 10px 16px; align-items: center; }
+.sbar { display: flex; height: 22px; border-radius: 5px; overflow: hidden; background: var(--surface-2); }
+.sbar span { display: block; height: 100%; min-width: 2px; }
+.sbar span + span { border-left: 1px solid var(--surface); }
+.emetric { display: flex; flex-direction: column; text-align: right; font-variant-numeric: tabular-nums; line-height: 1.3; }
+.emetric b { font-size: 0.98rem; }
+.emetric small { color: var(--ink-3); font-size: 0.78rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.78rem; color: var(--ink-3); }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 10px; }
+.fact { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; display: grid; gap: 1px; }
+.fact span { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+.fact b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.section-label { font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-bottom: 8px; }
+.reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+.files { display: grid; gap: 6px; }
+.files div { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 0.86rem; }
+.files .etag { min-width: 60px; }
+.error { color: var(--bad); font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; background: var(--bad-soft); border-radius: 8px; padding: 10px 12px; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 0.8rem; color: var(--ink-3); }
+.verdict { font-size: 0.9rem; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+
+/* ---------- benchmark chart ---------- */
+.bchart { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 7px 12px; align-items: center; font-size: 0.86rem; }
+.bchart .size { font-weight: 600; font-variant-numeric: tabular-nums; }
+.bchart .track { height: 16px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.bchart .fill { height: 100%; border-radius: 4px; min-width: 2px; }
+.bchart .fill.duckdb { background: var(--duck); }
+.bchart .fill.jq { background: var(--jq); }
+.bchart .val { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.bchart .val small { color: var(--ink-3); }
+.bchart .gap { grid-column: 1 / -1; height: 4px; }
+details.table > summary { cursor: pointer; font-size: 0.86rem; color: var(--ink-2); font-weight: 600; }
+details.table[open] > summary { margin-bottom: 10px; }
+details.table .table-wrap { border: 1px solid var(--line); border-radius: 8px; }
+
+/* ---------- activity ---------- */
+.log { list-style: none; margin: 0; padding: 0; max-height: 70vh; overflow-y: auto; }
+.log li { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; padding: 9px 20px; border-bottom: 1px solid var(--line); font-size: 0.88rem; }
+.log li:last-child { border-bottom: 0; }
+.log time { color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: 0.82rem; }
+.log .kind { font-size: 0.72rem; color: var(--ink-3); margin-left: 8px; }
+
+/* ---------- side panel, modal, toasts ---------- */
+dialog { border: 0; padding: 0; color: var(--ink); background: var(--surface); }
+dialog::backdrop { background: rgb(10 15 23 / 0.45); }
+dialog.panel { margin: 0 0 0 auto; height: 100%; max-height: 100%; width: min(520px, 100vw); max-width: 100vw; box-shadow: var(--shadow-lg); flex-direction: column; }
+dialog.panel.wide { width: min(820px, 100vw); }
+dialog.panel[open] { display: flex; animation: slide 0.18s ease-out; }
+@keyframes slide { from { transform: translateX(24px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { dialog.panel[open] { animation: none; } }
+.panel-head { display: flex; align-items: flex-start; gap: 12px; padding: 18px 22px 14px; border-bottom: 1px solid var(--line); }
+dialog.panel .panel-head { padding-top: calc(18px + env(safe-area-inset-top, 0px)); }
+.panel-head > div { margin-right: auto; display: grid; gap: 2px; }
+.panel-head h3 { margin: 0; font-size: 1.12rem; }
+.panel-head p { margin: 0; color: var(--ink-3); font-size: 0.88rem; }
+.panel-body { padding: 20px 22px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 20px; }
+.panel-body > * { flex: none; }
+.panel-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--line); background: var(--surface); padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+.panel-foot .msg { margin-right: auto; flex: 1 1 200px; }
+dialog.modal { border-radius: 12px; width: min(440px, calc(100vw - 32px)); box-shadow: var(--shadow-lg); }
+.modal-body { padding: 22px 22px 8px; display: grid; gap: 8px; }
+.modal-body h3 { margin: 0; font-size: 1.08rem; }
+.modal-body p { margin: 0; color: var(--ink-2); }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 22px 20px; }
+dialog.preview { border-radius: 12px; width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - 64px); box-shadow: var(--shadow-lg); }
+dialog.preview pre { margin: 0; padding: 16px 22px; font-family: var(--font-mono); font-size: 0.8rem; overflow: auto; max-height: 68vh; background: var(--surface-2); }
+.toasts { position: fixed; right: max(20px, env(safe-area-inset-right, 0px)); bottom: max(20px, env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; z-index: 20; width: min(380px, calc(100vw - 40px)); }
+.toast { background: var(--ink); color: var(--page); border-radius: 10px; padding: 12px 14px; box-shadow: var(--shadow-lg); font-size: 0.9rem; animation: rise 0.18s ease-out; }
+.toast.err { background: var(--bad); color: #ffffff; }
+@keyframes rise { from { transform: translateY(8px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* ---------- forms ---------- */
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 480px) { .fields { grid-template-columns: minmax(0, 1fr); } }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.field > label, .group-label { font-size: 0.8rem; font-weight: 600; color: var(--ink-2); }
+.field small { font-size: 0.77rem; color: var(--ink-3); line-height: 1.35; }
+.field input, .field select, .map-select { height: 38px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); min-width: 0; width: 100%; }
+.field input[type="file"] { height: auto; padding: 7px 10px; }
+.group { display: grid; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { position: relative; }
+.chip input { position: absolute; opacity: 0; inset: 0; cursor: pointer; margin: 0; }
+.chip > span { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 0.86rem; font-weight: 500; background: var(--surface); }
+.chip > input:checked + span { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.chip.duckdb > input:checked + span { background: var(--duck); border-color: var(--duck); color: #ffffff; }
+.chip.jq > input:checked + span { background: var(--jq); border-color: var(--jq); color: #ffffff; }
+.chip input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check { display: flex; align-items: flex-start; gap: 9px; font-size: 0.9rem; cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--primary); margin: 2px 0 0; flex: none; }
+.check small { display: block; color: var(--ink-3); font-size: 0.78rem; }
+.seg { display: inline-flex; justify-self: start; background: var(--surface-2); border-radius: 9px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 7px; font-size: 0.86rem; font-weight: 600; color: var(--ink-3); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+details.more > summary { cursor: pointer; font-size: 0.88rem; color: var(--ink-2); font-weight: 600; }
+details.more[open] > summary { margin-bottom: 14px; }
+.msg { font-size: 0.86rem; color: var(--ink-3); margin: 0; }
+.msg.err { color: var(--bad); }
+.note { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; font-size: 0.86rem; color: var(--ink-2); margin: 0; }
+
+/* ---------- column mapping ---------- */
+.mapsec { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.mapsec-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.mapsec-head b { text-transform: capitalize; }
+.maprow { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.1fr); gap: 10px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.maprow:last-child { border-bottom: 0; }
+.maprow .col { font-family: var(--font-mono); font-size: 0.82rem; }
+.maprow .col small { display: block; font-family: var(--font-body); font-size: 0.72rem; color: var(--ink-3); }
+.maprow .col small.req { color: var(--bad); font-weight: 600; }
+.maprow .sample { font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.maprow.unset .map-select { border-color: var(--warn); }
+.maprow.unset.required .map-select { border-color: var(--bad); }
+.map-select { height: 34px; font-size: 0.86rem; }
+@media (max-width: 560px) { .maprow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .maprow .sample { grid-column: 1 / -1; } }
+
+/* ---------- data explorer ---------- */
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.toolbar select, .toolbar input[type="search"] { height: 36px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); min-width: 0; max-width: 100%; }
+.toolbar select { max-width: min(420px, 100%); }
+.toolbar .grow { flex: 1 1 200px; }
+.chips.tight .chip > span { height: 30px; padding: 0 12px; font-size: 0.84rem; }
+.chip .n { font-size: 0.74rem; opacity: 0.75; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.grid-wrap { overflow: auto; max-height: 64vh; }
+table.grid th { position: sticky; top: 0; z-index: 2; }
+table.grid td { font-family: var(--font-mono); font-size: 0.8rem; padding: 6px 12px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+table.grid th.rn, table.grid td.rn { position: sticky; left: 0; z-index: 1; background: var(--surface-2); color: var(--ink-3); text-align: right; font-family: var(--font-mono); }
+table.grid th.rn { z-index: 3; }
+table.grid td.cell { cursor: text; }
+table.grid td.cell:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
+table.grid td.edited { background: var(--warn-soft); box-shadow: inset 2px 0 0 var(--warn); }
+table.grid .null { color: var(--ink-3); font-style: italic; font-family: var(--font-body); }
+table.grid tr.deleted td.cell { background: var(--bad-soft); text-decoration: line-through; color: var(--ink-3); }
+table.grid td.cell.editing { padding: 3px 6px; overflow: visible; }
+table.grid td.cell input { width: 100%; min-width: 120px; font: inherit; border: 1.5px solid var(--primary); border-radius: 5px; padding: 3px 6px; background: var(--surface); color: var(--ink); }
+table.grid td.acts { position: sticky; right: 0; background: var(--surface); }
+tbody tr:hover td.acts { background: var(--hover); }
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; padding: 10px 20px; border-top: 1px solid var(--line); font-size: 0.86rem; color: var(--ink-3); }
+.pager div { display: flex; gap: 6px; }
+.changes { border-top: 1px solid var(--line); background: var(--warn-soft); padding: 12px 20px; display: grid; gap: 10px; border-radius: 0 0 10px 10px; }
+.changes-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.changes-head b { margin-right: auto; }
+.change-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 220px; overflow: auto; }
+.change-list li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 0.86rem; background: var(--surface); border-radius: 6px; padding: 5px 6px 5px 10px; }
+.change-list .what { margin-right: auto; min-width: 0; overflow-wrap: anywhere; }
+.change-list s { color: var(--ink-3); }
+tr.docrow { cursor: pointer; }
+tr.docrow.open td { background: var(--surface-2); }
+tr.docjson td { padding: 0; max-width: none; }
+tr.docjson pre { margin: 0; padding: 12px 20px; font-family: var(--font-mono); font-size: 0.78rem; background: var(--surface-2); max-height: 380px; overflow: auto; white-space: pre; }
+td.errs { color: var(--bad); }
+
+/* ---------- rules ---------- */
+.rules-table td { vertical-align: middle; }
+.rules-table input[type="text"], .rules-table select { height: 32px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); width: 100%; min-width: 90px; font-size: 0.86rem; }
+.rules-table td.arrow { color: var(--ink-3); text-align: center; padding-inline: 0; }
+input.switch { appearance: none; -webkit-appearance: none; width: 36px; height: 20px; border-radius: 999px; background: var(--line-strong); position: relative; cursor: pointer; flex: none; margin: 0; transition: background 0.15s; }
+input.switch::before { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: transform 0.15s; box-shadow: var(--shadow); }
+input.switch:checked { background: var(--good); }
+input.switch:checked::before { transform: translateX(16px); }
+input.switch:disabled { cursor: not-allowed; opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) { input.switch, input.switch::before { transition: none; } }
+.rulelist { list-style: none; margin: 0; padding: 0; }
+.rulelist li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; align-items: start; padding: 11px 20px; border-bottom: 1px solid var(--line); }
+.rulelist li:last-child { border-bottom: 0; }
+.rulelist .code { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink-3); }
+.rulelist .why { grid-column: 2; font-size: 0.82rem; color: var(--ink-3); }
+.rulelist .why.off { color: var(--warn); font-weight: 600; }
+.savebar { position: sticky; bottom: max(16px, env(safe-area-inset-bottom, 0px)); z-index: 4; display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; padding: 12px 16px 12px 20px; box-shadow: var(--shadow-lg); border-color: var(--primary); }
+.savebar b { margin-right: 4px; }
+.savebar input { flex: 1 1 220px; height: 36px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); min-width: 0; }
 </style>
 </head>
 <body>
-<header>
-  <h1>DuckDB vs jq</h1>
-  <span class="sub">Tabular trade data → validated, nested JSON</span>
-  <span class="live"><span id="dot" class="dot"></span><span id="live-label">connecting…</span></span>
-  <a href="/tracker" style="color:var(--ink);font-size:13px">Trade tracker →</a>
-</header>
-<main>
-  <div>
-    <section>
-      <h2>1 · Datasets <span class="hint">synthetic (deterministic by seed) or uploaded CSV/Parquet</span></h2>
-      <form id="gen-form">
-        <label>Rows
-          <select name="rows">
-            <option value="5000">5k</option><option value="50000">50k</option><option value="500000">500k</option>
-            <option value="1000000">1M</option><option value="5000000">5M</option>
-          </select></label>
-        <label>Seed <input type="number" name="seed" value="42" style="width:80px"></label>
-        <label>Dirty rate <input type="number" name="dirty_rate" value="0.02" step="0.01" min="0" max="0.5" style="width:80px"></label>
-        <label>Hierarchy depth <input type="number" name="hierarchy_depth" value="7" min="1" max="1000" style="width:80px"></label>
-        <label>Max chain <input type="number" name="max_chain_length" value="5" min="1" max="500" style="width:80px"></label>
-        <button class="primary">Generate</button>
-        <button type="button" id="presets">Generate all presets</button>
-      </form>
-      <details><summary>Upload your own files</summary>
-        <form id="upload-form" style="margin-top:8px">
-          <label>trades * <input type="file" name="trades" accept=".csv,.parquet" required></label>
-          <label>counterparties <input type="file" name="counterparties" accept=".csv,.parquet"></label>
-          <label>instruments <input type="file" name="instruments" accept=".csv,.parquet"></label>
-          <label>books <input type="file" name="books" accept=".csv,.parquet"></label>
-          <label>fx_rates <input type="file" name="fx_rates" accept=".csv,.parquet"></label>
-          <button class="primary">Upload</button>
-        </form>
-      </details>
-      <div class="table-wrap"><table id="datasets"></table></div>
-    </section>
-
-    <section>
-      <h2>2 · Clean, validate &amp; transform <span class="hint">same pipeline, two engines, verified equivalent</span></h2>
-      <form id="cmp-form">
-        <label>Dataset <select name="dataset_id" id="dataset-select" required></select></label>
-        <label>Source <select name="source_format"><option>parquet</option><option>csv</option></select></label>
-        <label class="inline"><input type="checkbox" name="duckdb" checked> duckdb</label>
-        <label class="inline"><input type="checkbox" name="jq" checked> jq</label>
-        <label>Trade date from <input type="date" name="trade_date_from"></label>
-        <label>to <input type="date" name="trade_date_to"></label>
-        <label>Instrument types <input type="text" name="instrument_types" placeholder="EQUITY,BOND" style="width:120px"></label>
-        <label>Min notional USD <input type="number" name="min_notional_usd" style="width:110px"></label>
-        <label class="inline"><input type="checkbox" name="latest_only"> latest only</label>
-        <label class="inline"><input type="checkbox" name="verify" checked> verify</label>
-        <label class="inline"><input type="checkbox" name="parallel_engines"> parallel</label>
-        <button class="primary">Run</button>
-      </form>
-      <div class="legend" id="legend"></div>
-      <div id="comparisons"></div>
-    </section>
-
-    <section>
-      <h2>3 · Benchmark suite <span class="hint">sizes run one after another; outputs discarded after verification</span></h2>
-      <form id="bench-form">
-        <label class="inline"><input type="checkbox" name="size" value="5k" checked> 5k</label>
-        <label class="inline"><input type="checkbox" name="size" value="50k" checked> 50k</label>
-        <label class="inline"><input type="checkbox" name="size" value="500k" checked> 500k</label>
-        <label class="inline"><input type="checkbox" name="size" value="1m"> 1M</label>
-        <label class="inline"><input type="checkbox" name="size" value="5m"> 5M</label>
-        <label>Source <select name="source_format"><option>parquet</option><option>csv</option></select></label>
-        <button class="primary">Run benchmark</button>
-      </form>
-      <div id="benchmarks"></div>
-    </section>
-
-    <section id="preview-section" hidden>
-      <h2>Output preview <span class="hint" id="preview-title"></span></h2>
-      <pre id="preview"></pre>
-    </section>
+<header class="topbar gutter">
+  <div class="topbar-inner">
+    <div class="brand"><span class="logo" aria-hidden="true"></span><h1>DuckDB vs jq</h1></div>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#overview" data-tab="overview">Overview</a>
+      <a href="#datasets" data-tab="datasets">Datasets <span class="count" id="count-datasets"></span></a>
+      <a href="#data" data-tab="data">Data</a>
+      <a href="#runs" data-tab="runs">Runs <span class="count" id="count-runs"></span></a>
+      <a href="#benchmarks" data-tab="benchmarks">Benchmarks <span class="count" id="count-benchmarks"></span></a>
+      <a href="#rules" data-tab="rules">Rules <span class="count" id="count-rules"></span></a>
+      <a href="#activity" data-tab="activity">Activity</a>
+    </nav>
+    <span class="live" title="Live updates from the server"><span id="dot" class="dot"></span><span id="live-label">connecting</span></span>
+    <a class="out" href="/tracker">Trade tracker</a>
   </div>
+</header>
 
-  <aside>
-    <section>
-      <h2>Event stream <span class="hint">/api/events</span></h2>
-      <div id="log"><p class="muted" id="log-empty">Nothing yet. Generate a dataset or run a comparison and events show up here.</p></div>
-    </section>
-  </aside>
+<main class="app gutter">
+
+  <!-- OVERVIEW -->
+  <section class="view" data-view="overview">
+    <div class="page-head">
+      <div>
+        <h2>Overview</h2>
+        <p>One trade pipeline, built twice: once in DuckDB and once in jq. This is how they compare on your data.</p>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn" data-open="run">New run</button>
+        <button type="button" class="btn primary" data-open="bench">New benchmark</button>
+      </div>
+    </div>
+    <div class="steps" id="ov-start" hidden>
+      <div class="card step"><span class="n">1</span><b>Create a dataset</b><p>Synthetic trades with deliberate mess, or your own CSV and Parquet files.</p><button type="button" class="btn small" data-open="dataset">New dataset</button></div>
+      <div class="card step"><span class="n">2</span><b>Run the pipeline</b><p>Run DuckDB, jq or both. With both, the outputs are checked to be identical.</p><button type="button" class="btn small" data-open="run">New run</button></div>
+      <div class="card step"><span class="n">3</span><b>Benchmark sizes</b><p>Several sizes one after another, to see how each engine scales.</p><button type="button" class="btn small" data-open="bench">New benchmark</button></div>
+    </div>
+    <div id="ov-headline"></div>
+    <div class="kpis" id="ov-kpis"></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><h3 id="ov-bench-title">Latest benchmark</h3><a href="#benchmarks">All benchmarks</a></div>
+        <div class="card-body" id="ov-bench"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Running now</h3><span class="muted" id="ov-running-count"></span></div>
+        <ul class="running" id="ov-running"></ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Recent runs</h3><a href="#runs">All runs</a></div>
+      <div class="table-wrap" id="ov-recent"></div>
+    </div>
+  </section>
+
+  <!-- DATASETS -->
+  <section class="view" data-view="datasets" hidden>
+    <div class="page-head">
+      <div>
+        <h2>Datasets</h2>
+        <p>Five linked tables: trades, counterparties, instruments, books and FX rates. If an upload's columns don't match, fix them and save a new version.</p>
+      </div>
+      <div class="actions"><button type="button" class="btn primary" data-open="dataset">New dataset</button></div>
+    </div>
+    <div class="card"><div class="table-wrap" id="ds-table"></div></div>
+  </section>
+
+  <!-- RUNS -->
+  <section class="view" data-view="runs" hidden>
+    <div class="page-head">
+      <div>
+        <h2>Runs</h2>
+        <p>Each run takes one dataset through the five stages, with one engine or both. Click a run for stage times, data quality and output files.</p>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn" id="clear-history">Clear history</button>
+        <button type="button" class="btn primary" data-open="run">New run</button>
+      </div>
+    </div>
+    <div class="card" id="runs-card"></div>
+  </section>
+
+  <!-- BENCHMARKS -->
+  <section class="view" data-view="benchmarks" hidden>
+    <div class="page-head">
+      <div>
+        <h2>Benchmarks</h2>
+        <p>Several sizes, run one after another so the timings don't compete for the CPU. Click a benchmark for its chart and numbers.</p>
+      </div>
+      <div class="actions"><button type="button" class="btn primary" data-open="bench">New benchmark</button></div>
+    </div>
+    <div class="card" id="bench-card"></div>
+  </section>
+
+  <!-- DATA -->
+  <section class="view" data-view="data" hidden>
+    <div class="page-head">
+      <div>
+        <h2>Data</h2>
+        <p>Raw input tables, and what the pipeline made of them. Click a raw value to change it, or mark a row to remove it. Saving creates a new version and keeps the original.</p>
+      </div>
+      <div class="actions">
+        <div class="seg" role="group" aria-label="What to show">
+          <button type="button" data-xmode="input" aria-pressed="true">Input tables</button>
+          <button type="button" data-xmode="output" aria-pressed="false">Pipeline output</button>
+        </div>
+      </div>
+    </div>
+    <div class="card" id="data-input">
+      <div class="toolbar">
+        <select id="x-dataset" aria-label="Dataset"></select>
+        <span class="chips tight" id="x-tables" role="group" aria-label="Table"></span>
+        <input type="search" id="x-search" class="grow" placeholder="Row number, or any value" aria-label="Search rows">
+      </div>
+      <div class="grid-wrap" id="x-grid"></div>
+      <div class="pager" id="x-pager"></div>
+      <div class="changes" id="x-changes" hidden></div>
+    </div>
+    <div class="card" id="data-output" hidden>
+      <div class="toolbar">
+        <select id="o-run" aria-label="Run"></select>
+        <span class="chips tight" id="o-outputs" role="group" aria-label="Output file"></span>
+        <input type="search" id="o-search" class="grow" placeholder="Trade id, or any value" aria-label="Search documents">
+      </div>
+      <div class="grid-wrap" id="o-grid"></div>
+      <div class="pager" id="o-pager"></div>
+    </div>
+  </section>
+
+  <!-- RULES -->
+  <section class="view" data-view="rules" hidden>
+    <div class="page-head">
+      <div>
+        <h2>Rules</h2>
+        <p>Correction rules change values while the data is read, in both engines. Validation switches decide which problems reject a trade. Saving creates a new version: runs started afterwards use it, and every run keeps the version it used.</p>
+      </div>
+      <div class="actions"><span class="pill tone-muted" id="rules-version">version 0</span></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Correction rules</h3><button type="button" class="btn small" id="add-rule">Add rule</button></div>
+      <div class="table-wrap" id="corrections"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Validation rules</h3><span class="muted" id="rules-off"></span></div>
+      <ul class="rulelist" id="rulelist"></ul>
+    </div>
+    <div class="card savebar" id="rules-save" hidden>
+      <b>Unsaved changes</b>
+      <input id="rules-note" placeholder="What changed and why (optional)" aria-label="Note for this version">
+      <button type="button" class="btn" id="rules-discard">Discard</button>
+      <button type="button" class="btn primary" id="rules-commit">Save</button>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>History</h3><span class="muted">every saved version</span></div>
+      <div class="table-wrap" id="rules-history"></div>
+    </div>
+  </section>
+
+  <!-- ACTIVITY -->
+  <section class="view" data-view="activity" hidden>
+    <div class="page-head">
+      <div>
+        <h2>Activity</h2>
+        <p>Everything the app does, live, while this page is open.</p>
+      </div>
+      <div class="actions"><button type="button" class="btn" id="clear-log">Clear</button></div>
+    </div>
+    <div class="card"><ul class="log" id="log"></ul><div class="empty" id="log-empty"><b>Nothing yet</b><span>Create a dataset or start a run, and its steps show up here.</span></div></div>
+  </section>
 </main>
+
+<!-- PANEL: new dataset -->
+<dialog class="panel" id="panel-dataset" aria-labelledby="pd-title">
+  <div class="panel-head"><div><h3 id="pd-title">New dataset</h3><p>The same settings always give the same data, so an existing one is reused.</p></div>
+    <button type="button" class="ibtn" data-close aria-label="Close" data-icon="x"></button></div>
+  <div class="panel-body">
+    <div class="seg" role="group" aria-label="Dataset source">
+      <button type="button" data-seg="generate" aria-pressed="true">Generate</button>
+      <button type="button" data-seg="upload" aria-pressed="false">Upload files</button>
+    </div>
+    <form id="gen-form" class="fields" data-seg-pane="generate">
+      <div class="field wide"><label for="g-rows">Size</label>
+        <input id="g-rows" name="rows" value="50k" list="size-presets" required autocomplete="off">
+        <small>Number of trades: 5k, 50k, 500k, 1m, 5m or any number from 100 to 20,000,000.</small></div>
+      <div class="field"><label for="g-seed">Seed</label><input id="g-seed" type="number" name="seed" value="42"><small>Change it for different random data.</small></div>
+      <div class="field"><label for="g-dirty">Messy rows (%)</label><input id="g-dirty" type="number" name="dirty_pct" value="2" min="0" max="50" step="0.5"><small>Rows with problems on purpose.</small></div>
+      <div class="field"><label for="g-depth">Company tree depth</label><input id="g-depth" type="number" name="hierarchy_depth" value="7" min="1" max="1000"><small>Levels of parent companies.</small></div>
+      <div class="field"><label for="g-chain">Amendment chain</label><input id="g-chain" type="number" name="max_chain_length" value="5" min="1" max="500"><small>Versions one trade can have.</small></div>
+    </form>
+    <form id="upload-form" class="group" data-seg-pane="upload" hidden>
+      <p class="note">CSV or Parquet, one file per table. Only trades is required. If the column names differ from the expected ones, you can fix them after the upload.</p>
+      <div class="fields">
+        <div class="field wide"><label for="u-trades">Trades (required)</label><input id="u-trades" type="file" name="trades" accept=".csv,.parquet" required></div>
+        <div class="field wide"><label for="u-cp">Counterparties</label><input id="u-cp" type="file" name="counterparties" accept=".csv,.parquet"></div>
+        <div class="field wide"><label for="u-ins">Instruments</label><input id="u-ins" type="file" name="instruments" accept=".csv,.parquet"></div>
+        <div class="field wide"><label for="u-books">Books</label><input id="u-books" type="file" name="books" accept=".csv,.parquet"></div>
+        <div class="field wide"><label for="u-fx">FX rates</label><input id="u-fx" type="file" name="fx_rates" accept=".csv,.parquet"></div>
+      </div>
+    </form>
+  </div>
+  <div class="panel-foot">
+    <p class="msg" role="status"></p>
+    <button type="button" class="btn" id="presets" data-seg-pane="generate" title="Uses the seed and settings above">Create 5k, 50k, 500k</button>
+    <button type="button" class="btn primary" id="dataset-submit">Create dataset</button>
+  </div>
+</dialog>
+
+<!-- PANEL: new run -->
+<dialog class="panel" id="panel-run" aria-labelledby="pr-title">
+  <div class="panel-head"><div><h3 id="pr-title">New run</h3><p>Take one dataset through the five stages.</p></div>
+    <button type="button" class="ibtn" data-close aria-label="Close" data-icon="x"></button></div>
+  <form id="run-form" class="panel-body">
+    <div class="field"><label for="r-dataset">Dataset</label><select id="r-dataset" name="dataset_id" required></select></div>
+    <div class="group"><span class="group-label">Engines</span>
+      <span class="chips">
+        <label class="chip duckdb"><input type="checkbox" name="duckdb" checked><span>DuckDB</span></label>
+        <label class="chip jq"><input type="checkbox" name="jq" checked><span>jq</span></label>
+      </span></div>
+    <div class="group"><span class="group-label">Read from</span>
+      <span class="chips">
+        <label class="chip"><input type="radio" name="source_format" value="parquet" checked><span>Parquet</span></label>
+        <label class="chip"><input type="radio" name="source_format" value="csv"><span>CSV</span></label>
+      </span></div>
+    <label class="check"><input type="checkbox" name="verify" checked><span>Check the outputs match<small>Compares DuckDB's and jq's output document by document.</small></span></label>
+    <label class="check"><input type="checkbox" name="parallel_engines"><span>Run both engines at the same time<small>Faster, but they share the CPU, so the timings are less fair.</small></span></label>
+    <details class="more"><summary>Filters (optional)</summary>
+      <div class="fields">
+        <div class="field"><label for="r-from">Trade date from</label><input id="r-from" type="date" name="trade_date_from"></div>
+        <div class="field"><label for="r-to">Trade date to</label><input id="r-to" type="date" name="trade_date_to"></div>
+        <div class="field"><label for="r-types">Instrument types</label><input id="r-types" name="instrument_types" placeholder="EQUITY, BOND"></div>
+        <div class="field"><label for="r-min">Minimum notional (USD)</label><input id="r-min" type="number" name="min_notional_usd" min="0"></div>
+        <label class="check field wide"><input type="checkbox" name="latest_only"><span>Latest version of each trade only</span></label>
+      </div>
+    </details>
+  </form>
+  <div class="panel-foot"><p class="msg" role="status"></p><button type="submit" form="run-form" class="btn primary" id="run-submit">Start run</button></div>
+</dialog>
+
+<!-- PANEL: new benchmark -->
+<dialog class="panel" id="panel-bench" aria-labelledby="pb-title">
+  <div class="panel-head"><div><h3 id="pb-title">New benchmark</h3><p>Missing datasets are created first.</p></div>
+    <button type="button" class="ibtn" data-close aria-label="Close" data-icon="x"></button></div>
+  <form id="bench-form" class="panel-body">
+    <div class="group"><span class="group-label">Sizes</span>
+      <span class="chips">
+        <label class="chip"><input type="checkbox" name="size" value="5k" checked><span>5k</span></label>
+        <label class="chip"><input type="checkbox" name="size" value="50k" checked><span>50k</span></label>
+        <label class="chip"><input type="checkbox" name="size" value="500k"><span>500k</span></label>
+        <label class="chip"><input type="checkbox" name="size" value="1m"><span>1M</span></label>
+        <label class="chip"><input type="checkbox" name="size" value="5m"><span>5M</span></label>
+      </span></div>
+    <div class="fields">
+      <div class="field wide"><label for="b-custom">Other sizes</label><input id="b-custom" name="custom_sizes" placeholder="7500, 250k"><small>Separate with commas.</small></div>
+      <div class="field"><label for="b-seed">Seed</label><input id="b-seed" type="number" name="seed" value="42"></div>
+      <div class="field"><label for="b-dirty">Messy rows (%)</label><input id="b-dirty" type="number" name="dirty_pct" value="2" min="0" max="50" step="0.5"></div>
+      <div class="field"><label for="b-depth">Company tree depth</label><input id="b-depth" type="number" name="hierarchy_depth" value="7" min="1" max="1000"></div>
+      <div class="field"><label for="b-chain">Amendment chain</label><input id="b-chain" type="number" name="max_chain_length" value="5" min="1" max="500"></div>
+    </div>
+    <div class="group"><span class="group-label">Engines</span>
+      <span class="chips">
+        <label class="chip duckdb"><input type="checkbox" name="duckdb" checked><span>DuckDB</span></label>
+        <label class="chip jq"><input type="checkbox" name="jq" checked><span>jq</span></label>
+      </span></div>
+    <div class="group"><span class="group-label">Read from</span>
+      <span class="chips">
+        <label class="chip"><input type="radio" name="source_format" value="parquet" checked><span>Parquet</span></label>
+        <label class="chip"><input type="radio" name="source_format" value="csv"><span>CSV</span></label>
+      </span></div>
+    <label class="check"><input type="checkbox" name="verify" checked><span>Check the outputs match<small>Only used when both engines run.</small></span></label>
+    <label class="check"><input type="checkbox" name="keep_outputs"><span>Keep output files<small>Lets you preview and download them later. Needs disk space at large sizes.</small></span></label>
+  </form>
+  <div class="panel-foot"><p class="msg" role="status"></p><button type="submit" form="bench-form" class="btn primary" id="bench-submit">Start benchmark</button></div>
+</dialog>
+
+<!-- PANEL: fix columns -->
+<dialog class="panel wide" id="panel-columns" aria-labelledby="pc-title">
+  <div class="panel-head"><div><h3 id="pc-title">Fix columns</h3><p id="pc-sub">Match each expected column to a column in your file.</p></div>
+    <button type="button" class="ibtn" data-close aria-label="Close" data-icon="x"></button></div>
+  <div class="panel-body" id="pc-body"></div>
+  <div class="panel-foot"><p class="msg" role="status"></p><button type="button" class="btn primary" id="pc-save">Save as new version</button></div>
+</dialog>
+
+<!-- confirm -->
+<dialog class="modal" id="confirm" aria-labelledby="cf-title">
+  <div class="modal-body"><h3 id="cf-title"></h3><p id="cf-text"></p></div>
+  <div class="modal-foot"><button type="button" class="btn" id="cf-cancel">Cancel</button><button type="button" class="btn danger" id="cf-ok">Delete</button></div>
+</dialog>
+
+<!-- output preview -->
+<dialog class="preview" id="preview" aria-labelledby="pv-title">
+  <div class="panel-head"><div><h3 id="pv-title">Preview</h3><p id="pv-sub"></p></div>
+    <a class="btn small" id="pv-download" href="#">Download the full file</a>
+    <button type="button" class="ibtn" data-close aria-label="Close" data-icon="x"></button></div>
+  <pre id="pv-body"></pre>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<datalist id="size-presets"><option value="5k"><option value="50k"><option value="500k"><option value="1m"><option value="5m"></datalist>
 
 <script>
 const STAGES = ["ingest", "clean", "validate", "transform", "aggregate"];
-const $ = (sel) => document.querySelector(sel);
-const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const fmtN = (n) => n == null ? "-" : Number(n).toLocaleString();
-const fmtS = (s) => s == null ? "-" : s < 10 ? s.toFixed(2) + "s" : s < 600 ? s.toFixed(1) + "s" : (s / 60).toFixed(1) + "m";
-const fmtMB = (mb) => mb == null ? "-" : mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb >= 1 ? mb.toFixed(0) + " MB" : (mb * 1024).toFixed(0) + " KB";
-const badge = (s) => `<span class="badge s-${esc(s)}">${esc(s)}</span>`;
+const STAGE_INFO = {
+  ingest: "read the input files",
+  clean: "trim, parse, remove duplicates",
+  validate: "check 13 rules, reject bad trades",
+  transform: "resolve links, build nested JSON",
+  aggregate: "sum exposure per parent company",
+};
+const ENGINE = { duckdb: "DuckDB", jq: "jq" };
+const OUTPUT_LABEL = { trades: "Trades", rejects: "Rejects", exposures: "Exposures", quality_report: "Quality report" };
+const SIZE_PRESETS = { "5k": 5000, "50k": 50000, "500k": 500000, "1m": 1000000, "5m": 5000000 };
+const ACTIVE = new Set(["pending", "queued", "running", "verifying", "preparing"]);
+const ICONS = {
+  x: '<path d="M5 5l10 10M15 5L5 15"/>',
+  play: '<path d="M6.5 4.5v11l9-5.5z"/>',
+  chart: '<path d="M4 16V9M10 16V4M16 16v-5"/>',
+  columns: '<rect x="3" y="4" width="14" height="12" rx="2"/><path d="M8 4v12M3 8h14"/>',
+  trash: '<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>',
+  chevron: '<path d="M5 8l5 5 5-5"/>',
+  doc: '<path d="M6 3h6l3 3v11H6z"/><path d="M12 3v3h3M8 10h5M8 13h5"/>',
+  eye: '<path d="M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.5"/>',
+  undo: '<path d="M7 7H4V4"/><path d="M4.5 7.5A6 6 0 1 1 6 14.5"/>',
+};
+const icon = (name) => `<svg class="i" viewBox="0 0 20 20" aria-hidden="true">${ICONS[name]}</svg>`;
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const fmtN = (n) => n == null ? "–" : Number(n).toLocaleString("en-US");
+const fmtS = (s) => s == null ? "–" : s < 1 ? `${Math.round(s * 1000)} ms` : s < 60 ? `${s.toFixed(s < 10 ? 2 : 1)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
+const fmtMB = (mb) => mb == null ? "–" : mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+const fmtBytes = (b) => !b ? "–" : b < 1048576 ? "< 1 MB" : fmtMB(b / 1048576);
+const fmtX = (x) => x == null ? "–" : `${x < 10 ? x.toFixed(1) : Math.round(x)}×`;
+const sizeLabel = (rows) => rows >= 1e6 && rows % 1e6 === 0 ? `${rows / 1e6}M` : rows >= 1e3 && rows % 1e3 === 0 ? `${rows / 1e3}k` : fmtN(rows);
+function ago(iso) {
+  if (!iso) return "";
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 45) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+const STATUS = {
+  ready: ["Ready", "good"], succeeded: ["Done", "good"], completed: ["Done", "good"], failed: ["Failed", "bad"],
+  pending: ["Creating", "warn"], queued: ["Queued", "warn"], running: ["Running", "warn"], verifying: ["Checking", "warn"], preparing: ["Preparing", "warn"],
+};
+function pill(status) {
+  const [label, tone] = STATUS[status] ?? [status, "muted"];
+  return `<span class="pill tone-${tone}${tone === "warn" ? " live-pill" : ""}">${esc(label)}</span>`;
+}
+const settingsText = (s) => s ? `seed ${s.seed} · ${+(s.dirty_rate * 100).toFixed(2)}% messy · tree ${s.hierarchy_depth} · chain ${s.max_chain_length}` : "";
 
 async function api(path, options = {}) {
   const res = await fetch(path, options);
+  if (res.status === 204) return null;
   const body = res.headers.get("content-type")?.includes("json") ? await res.json() : await res.text();
-  if (!res.ok) throw new Error(body?.detail ? JSON.stringify(body.detail) : res.statusText);
+  if (!res.ok) {
+    const detail = body?.detail;
+    throw new Error(Array.isArray(detail) ? detail.map((d) => d.msg).join("; ") : typeof detail === "string" ? detail : res.statusText);
+  }
   return body;
 }
 const post = (path, payload) => api(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+const del = (path) => api(path, { method: "DELETE" });
 
-$("#legend").innerHTML = STAGES.map((s) => `<span><i style="background:var(--${s})"></i>${s}</span>`).join("");
-
-function renderDatasets(datasets) {
-  const head = `<tr><th>Dataset</th><th>Origin</th><th>Status</th><th class="num">Trades</th><th class="num">Counterparties</th><th class="num">Parquet</th><th class="num">CSV</th><th class="num">Generated in</th></tr>`;
-  const rows = datasets.map((d) => `<tr>
-      <td><code>${esc(d.dataset_id)}</code>${d.error ? `<div class="err">${esc(d.error)}</div>` : ""}</td>
-      <td>${esc(d.origin)}</td><td>${badge(d.status)}</td>
-      <td class="num">${fmtN(d.row_counts.trades)}</td><td class="num">${fmtN(d.row_counts.counterparties)}</td>
-      <td class="num">${d.size_bytes.parquet ? fmtMB(d.size_bytes.parquet / 1048576) : "-"}</td>
-      <td class="num">${d.size_bytes.csv ? fmtMB(d.size_bytes.csv / 1048576) : "-"}</td>
-      <td class="num">${fmtS(d.generation_seconds)}</td></tr>`).join("");
-  $("#datasets").innerHTML = datasets.length ? head + rows : `<tr><td class="muted">No datasets yet. Generate one above.</td></tr>`;
-  const select = $("#dataset-select"), current = select.value;
-  select.innerHTML = datasets.filter((d) => d.status === "ready")
-    .map((d) => `<option value="${esc(d.dataset_id)}">${esc(d.dataset_id)} (${fmtN(d.row_counts.trades)})</option>`).join("");
-  if ([...select.options].some((o) => o.value === current)) select.value = current;
+function parseSize(text) {
+  const label = String(text).trim().toLowerCase().replace(/[,_\s]/g, "");
+  const rows = SIZE_PRESETS[label] ?? (/^\d+(\.\d+)?[km]$/.test(label) ? Math.round(parseFloat(label) * (label.endsWith("m") ? 1e6 : 1e3)) : /^\d+$/.test(label) ? Number(label) : NaN);
+  if (!(rows >= 100 && rows <= 20000000)) throw new Error(`"${text}" is not a size. Use 5k, 50k, 1m or a number from 100 to 20,000,000.`);
+  return rows;
 }
 
-function stageBar(run, scale) {
-  const spans = STAGES.map((stage) => {
-    const t = run.stages[stage];
-    if (!t) return "";
-    const width = scale ? (t.wall_seconds / scale) * 100 : 0;
-    return `<span title="${stage}: ${fmtS(t.wall_seconds)} · ${t.cpu_utilization} cores · ${fmtMB(t.peak_rss_mb)}" style="width:${width}%;background:var(--${stage})"></span>`;
-  }).join("");
-  return `<div class="bar">${spans}</div>`;
+/* ---------- toasts and confirm ---------- */
+function toast(text, isError = false) {
+  const el = document.createElement("div");
+  el.className = `toast${isError ? " err" : ""}`;
+  el.setAttribute("role", isError ? "alert" : "status");
+  el.textContent = text;
+  $("#toasts").append(el);
+  setTimeout(() => el.remove(), isError ? 7000 : 4000);
 }
-
-function renderComparison(report) {
-  const c = report.comparison;
-  const scale = Math.max(...report.runs.map((r) => r.total_seconds), 0.0001);
-  const slow = report.slowdown_vs_duckdb.jq;
-  const rows = report.runs.map((r) => `
-    <div class="engine-${r.engine}">${r.engine}</div>
-    ${stageBar(r, scale)}
-    <div class="metrics">${badge(r.status)} ${r.current_stage ? "· " + r.current_stage + " " : ""}
-      ${fmtS(r.total_seconds)} · ${fmtMB(r.peak_rss_mb)} · ${r.cpu_utilization} cores
-      ${r.error ? `<div class="err">${esc(r.error)}</div>` : ""}</div>`).join("");
-  const v = c.verification;
-  const verdict = v ? (report.equivalent
-      ? `<span class="s-succeeded">✔ outputs equivalent</span> <span class="muted">(${v.checks.map((k) => `${k.output}: ${fmtN(k.left_rows)} rows, ${fmtN(k.compared_docs)} compared`).join(" · ")}${v.sampled ? " · sampled" : ""})</span>`
-      : `<span class="s-failed">✘ outputs differ</span> <pre>${esc(JSON.stringify(v.checks.filter((k) => k.mismatched_docs || !k.keys_match), null, 1))}</pre>`)
-    : c.note ? `<span class="muted">${esc(c.note)}</span>` : "";
-  const links = report.runs.filter((r) => r.outputs.length).map((r) =>
-    `<span class="engine-${r.engine}">${r.engine}:</span> <a href="/tracker#run=${encodeURIComponent(r.run_id)}">track rows</a> ` + r.outputs.filter((o) => o !== "row_status").map((o) =>
-      `<a href="#" data-run="${r.run_id}" data-output="${o}">${o}</a><a href="/api/runs/${r.run_id}/outputs/${o}/download" title="download all rows">⤓</a>`).join(" ")).join(" &nbsp; ");
-  const quality = report.runs.find((r) => r.quality)?.quality;
-  return `<div class="card">
-    <div class="card-head">${badge(c.status)} <code>${esc(c.dataset_id)}</code> <span class="muted">${esc(c.source_format)}</span>
-      ${slow ? `<b>jq ${slow.total}× slower</b> <span class="muted">(${STAGES.filter((s) => slow[s] != null).map((s) => `${s} ${slow[s]}×`).join(", ")})</span>` : ""}
-      <span class="id">${esc(c.comparison_id)}</span></div>
-    <div class="bars">${rows}</div>
-    <div class="verdict">${verdict}</div>
-    ${quality ? `<div class="metrics">raw ${fmtN(quality.raw_rows)} → dupes −${fmtN(quality.duplicates_removed)} → valid ${fmtN(quality.valid_rows)} / rejected ${fmtN(quality.rejected_rows)} → output ${fmtN(quality.output_rows)} docs, ${fmtN(quality.exposure_groups)} exposure groups</div>` : ""}
-    <div class="links">${links}</div>
-  </div>`;
-}
-
-const specLabel = (s) => `${fmtN(s.rows)} rows` + (s.hierarchy_depth !== 7 ? ` · hierarchy depth ${s.hierarchy_depth}` : "")
-  + (s.max_chain_length !== 5 ? ` · chains up to ${s.max_chain_length}` : "");
-
-function renderBenchmark(report) {
-  const b = report.benchmark;
-  const max = Math.max(...report.rows.map((r) => r.total_seconds), 0.0001);
-  const rows = report.rows.map((r) => `<tr>
-      <td class="num">${fmtN(r.rows)}</td><td class="engine-${r.engine}">${r.engine}</td><td>${badge(r.status)}</td>
-      ${STAGES.map((s) => `<td class="num">${fmtS(r.stage_seconds[s])}</td>`).join("")}
-      <td class="num"><b>${fmtS(r.total_seconds)}</b></td>
-      <td style="min-width:120px"><div class="bar"><span style="width:${(r.total_seconds / max) * 100}%;background:var(--${r.engine === "duckdb" ? "duck" : "jq"})"></span></div></td>
-      <td class="num">${fmtMB(r.peak_rss_mb)}</td><td class="num">${r.cpu_utilization}</td>
-      <td class="num">${fmtN(r.rows_per_second)}</td>
-      <td class="num">${r.slowdown_vs_duckdb ? r.slowdown_vs_duckdb + "×" : "-"}</td>
-      <td>${r.equivalent == null ? "-" : r.equivalent ? "✔" : "✘"}</td></tr>
-      ${r.error ? `<tr><td></td><td colspan="14" class="err">${esc(r.error)}</td></tr>` : ""}`).join("");
-  return `<div class="card">
-    <div class="card-head">${badge(b.status)} <span>${b.specs.map(specLabel).join(" · ")} · ${esc(b.source_format)}</span>
-      <a href="/api/benchmarks/${b.benchmark_id}/report.md" target="_blank">markdown</a><span class="id">${esc(b.benchmark_id)}</span></div>
-    ${b.error ? `<div class="err">${esc(b.error)}</div>` : ""}
-    <div class="table-wrap"><table>
-      <tr><th class="num">Rows</th><th>Engine</th><th>Status</th>${STAGES.map((s) => `<th class="num">${s}</th>`).join("")}
-        <th class="num">Total</th><th></th><th class="num">Peak RSS</th><th class="num">Cores</th><th class="num">Rows/s</th><th class="num">× DuckDB</th><th>Equal</th></tr>
-      ${rows || `<tr><td colspan="15" class="muted">preparing datasets…</td></tr>`}
-    </table></div></div>`;
-}
-
-let refreshTimer = null;
-function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 250); }
-async function refresh() {
-  const [datasets, comparisons, benchmarks] = await Promise.all([api("/api/datasets"), api("/api/comparisons"), api("/api/benchmarks")]);
-  renderDatasets(datasets);
-  $("#comparisons").innerHTML = comparisons.filter((r) => !r.comparison.benchmark_id).slice(0, 15).map(renderComparison).join("")
-    || `<p class="muted">No comparisons yet.</p>`;
-  $("#benchmarks").innerHTML = benchmarks.slice(0, 5).map(renderBenchmark).join("") || `<p class="muted">No benchmarks yet.</p>`;
-}
-
-function logEvent(type, data) {
-  const ids = Object.entries(data).filter(([k]) => k.endsWith("_id")).map(([, v]) => v).join(" ");
-  let extra = "";
-  if (type === "StageCompleted") extra = ` ${data.metrics.stage} ${fmtS(data.metrics.wall_seconds)} ${fmtMB(data.metrics.peak_rss_mb)}`;
-  if (type === "StageStarted") extra = ` ${data.stage}`;
-  $("#log-empty")?.remove();
-  const line = document.createElement("div");
-  line.innerHTML = `<span class="muted">${new Date(data.occurred_at).toLocaleTimeString()}</span> <b>${esc(type)}</b>${esc(extra)} <span class="muted">${esc(ids)}</span>`;
-  $("#log").prepend(line);
-  while ($("#log").childElementCount > 300) $("#log").lastChild.remove();
-}
-
-function connect() {
-  const source = new EventSource("/api/events");
-  source.onopen = () => { $("#dot").classList.add("on"); $("#live-label").textContent = "live"; };
-  source.onerror = () => { $("#dot").classList.remove("on"); $("#live-label").textContent = "reconnecting…"; };
-  const types = ["DatasetGenerationRequested", "DatasetUploaded", "DatasetReady", "DatasetFailed", "RunStarted", "StageStarted",
-    "StageCompleted", "RunFinished", "OutputsDiscarded", "ComparisonRequested", "ComparisonStarted", "VerificationStarted",
-    "ComparisonCompleted", "BenchmarkRequested", "BenchmarkProgressed", "BenchmarkCompleted"];
-  for (const type of types) source.addEventListener(type, (e) => { logEvent(type, JSON.parse(e.data)); scheduleRefresh(); });
-}
-
-function withButton(form, handler) {
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const button = form.querySelector("button.primary");
-    button.disabled = true;
-    try { await handler(new FormData(form)); await refresh(); }
-    catch (err) { alert(err.message); }
-    finally { button.disabled = false; }
+function confirmDelete(title, text) {
+  const dialog = $("#confirm");
+  $("#cf-title").textContent = title;
+  $("#cf-text").textContent = text;
+  dialog.showModal();
+  return new Promise((resolve) => {
+    const done = (answer) => { if (dialog.open) dialog.close(); $("#cf-ok").onclick = $("#cf-cancel").onclick = dialog.oncancel = null; resolve(answer); };
+    $("#cf-ok").onclick = () => done(true);
+    $("#cf-cancel").onclick = () => done(false);
+    dialog.oncancel = () => done(false);
   });
 }
 
-withButton($("#gen-form"), (f) => post("/api/datasets/generate", {
-  rows: +f.get("rows"), seed: +f.get("seed"), dirty_rate: +f.get("dirty_rate"),
+/* ---------- state ---------- */
+const state = { datasets: [], comparisons: [], benchmarks: [], datasetsById: new Map(), runIndex: new Map() };
+const expanded = { runs: new Set(), bench: new Set() };
+const touched = { runs: false, bench: false };
+
+function datasetTitle(id) {
+  const d = state.datasetsById.get(id);
+  if (!d) return id;
+  if (d.origin === "version") {
+    const root = state.datasetsById.get(d.root_id);
+    return `${root ? datasetTitle(root.dataset_id) : d.root_id} · v${d.version}`;
+  }
+  if (d.generation) return `${fmtN(d.generation.rows)} trades`;
+  return "Uploaded files";
+}
+const nextVersion = (d) => {
+  const root = d.root_id ?? d.dataset_id;
+  return Math.max(...state.datasets.filter((x) => x.dataset_id === root || x.root_id === root).map((x) => x.version)) + 1;
+};
+
+/* ---------- overview ---------- */
+function bothEngines(report) {
+  const duck = report.runs.find((r) => r.engine === "duckdb" && r.status === "succeeded");
+  const jq = report.runs.find((r) => r.engine === "jq" && r.status === "succeeded");
+  return duck && jq ? { duck, jq } : null;
+}
+
+function renderOverview() {
+  const ready = state.datasets.filter((d) => d.status === "ready");
+  $("#ov-start").hidden = state.comparisons.length > 0;
+
+  const latest = state.comparisons.find((rep) => bothEngines(rep));
+  if (latest) {
+    const { duck, jq } = bothEngines(latest);
+    const rows = state.datasetsById.get(latest.comparison.dataset_id)?.row_counts?.trades ?? latest.runs[0].quality?.raw_rows;
+    const match = latest.equivalent === true ? "Both produced exactly the same output." : latest.equivalent === false ? "Their outputs did not match. Open the run to see why." : "";
+    $("#ov-headline").innerHTML = `<div class="headline">
+      <span class="eyebrow">Latest result · ${esc(ago(latest.comparison.created_at))}</span>
+      <span class="big">On ${fmtN(rows)} trades, jq took <span class="x">${fmtX(jq.total_seconds / duck.total_seconds)}</span> longer than DuckDB.</span>
+      <p>DuckDB ${fmtS(duck.total_seconds)} and ${fmtMB(duck.peak_rss_mb)} at peak · jq ${fmtS(jq.total_seconds)} and ${fmtMB(jq.peak_rss_mb)} at peak. ${match}</p>
+    </div>`;
+  } else {
+    $("#ov-headline").innerHTML = "";
+  }
+
+  const runs = state.comparisons.flatMap((rep) => rep.runs);
+  const ok = runs.filter((r) => r.status === "succeeded").length;
+  const failed = runs.filter((r) => r.status === "failed").length;
+  const active = runs.filter((r) => ACTIVE.has(r.status)).length;
+  const gaps = state.comparisons.map(bothEngines).filter(Boolean).map(({ duck, jq }) => jq.total_seconds / duck.total_seconds).sort((a, b) => a - b);
+  const median = gaps.length ? gaps[Math.floor(gaps.length / 2)] : null;
+  const checked = state.comparisons.filter((rep) => rep.equivalent != null);
+  const matched = checked.filter((rep) => rep.equivalent).length;
+  const trades = ready.reduce((sum, d) => sum + (d.row_counts.trades || 0), 0);
+  $("#ov-kpis").innerHTML = [
+    ["Datasets", fmtN(ready.length), ready.length ? `${fmtN(trades)} trades in total` : "none yet", ""],
+    ["Runs done", fmtN(ok), runs.length ? `${fmtN(failed)} failed · ${fmtN(active)} running` : "none yet", ""],
+    ["jq vs DuckDB", median ? fmtX(median) : "–", gaps.length ? `typical time gap · ${fmtX(gaps[0])} to ${fmtX(gaps.at(-1))}` : "run both engines to compare", ""],
+    ["Outputs match", checked.length ? `${matched} of ${checked.length}` : "–", checked.length ? (matched === checked.length ? "every check passed" : `${checked.length - matched} did not match`) : "no checks yet", checked.length ? (matched === checked.length ? "good" : "bad") : ""],
+  ].map(([label, value, sub, tone]) => `<div class="card kpi ${tone}"><span class="label">${label}</span><span class="value">${value}</span><span class="sub">${esc(sub)}</span></div>`).join("");
+
+  const withRows = state.benchmarks.filter((rep) => rep.rows.length);
+  const bench = withRows.find((rep) => rep.benchmark.engines.length > 1) ?? withRows[0];
+  $("#ov-bench-title").textContent = bench?.benchmark.engines.length > 1 ? "Latest DuckDB vs jq benchmark" : "Latest benchmark";
+  $("#ov-bench").innerHTML = bench
+    ? `<div class="meta" style="margin-bottom:14px">${pill(bench.benchmark.status)}<span>${esc(ago(bench.benchmark.created_at))}</span><span>${esc(benchSubtitle(bench.benchmark))}</span></div>${benchChart(bench)}`
+    : `<div class="empty"><b>No benchmarks yet</b><span>See how each engine scales with size.</span><button type="button" class="btn small" data-open="bench">New benchmark</button></div>`;
+
+  const items = [];
+  for (const d of state.datasets.filter((d) => d.status === "pending")) {
+    items.push(`<li><div class="what">${pill("pending")} <b>${esc(datasetTitle(d.dataset_id))}</b> <span class="muted">${esc(d.origin === "version" ? "applying the column fix" : settingsText(d.generation))}</span></div></li>`);
+  }
+  for (const rep of state.comparisons) {
+    for (const r of rep.runs.filter((r) => ACTIVE.has(r.status))) {
+      const at = r.current_stage ? STAGES.indexOf(r.current_stage) : -1;
+      items.push(`<li><div class="what"><span class="etag ${r.engine}">${ENGINE[r.engine]}</span> <b>${esc(datasetTitle(rep.comparison.dataset_id))}</b>
+        <span class="muted">${r.status === "queued" ? "waiting for a free worker" : r.current_stage ? `${esc(r.current_stage)}: ${esc(STAGE_INFO[r.current_stage])}` : "starting"}</span>
+        ${rep.comparison.benchmark_id ? `<span class="tag">benchmark</span>` : ""}</div>
+        <div class="progress5" aria-label="Stage ${at + 1} of 5">${STAGES.map((s, i) => `<span class="${i === at ? "now" : r.stages[s] || i < at ? "done" : ""}"></span>`).join("")}</div></li>`);
+    }
+    if (rep.comparison.status === "verifying") items.push(`<li><div class="what">${pill("verifying")} <b>${esc(datasetTitle(rep.comparison.dataset_id))}</b> <span class="muted">comparing DuckDB and jq outputs</span></div></li>`);
+  }
+  $("#ov-running").innerHTML = items.join("") || `<li class="empty"><b>Nothing running</b><span>Progress shows here while runs and benchmarks are going.</span></li>`;
+  $("#ov-running-count").textContent = items.length ? `${items.length} in progress` : "";
+
+  const recent = state.comparisons.slice(0, 6);
+  $("#ov-recent").innerHTML = recent.length ? `<table>
+    <thead><tr><th>Dataset</th><th class="r">DuckDB</th><th class="r">jq</th><th class="r">jq vs DuckDB</th><th>Outputs</th><th>Status</th><th class="r">When</th></tr></thead>
+    <tbody>${recent.map((rep) => {
+      const c = rep.comparison;
+      return `<tr><td><b>${esc(datasetTitle(c.dataset_id))}</b><span class="sub">${esc(c.source_format)}${c.benchmark_id ? " · benchmark" : ""}</span></td>
+        <td class="r">${engineTime(rep, "duckdb")}</td><td class="r">${engineTime(rep, "jq")}</td>
+        <td class="r">${rep.slowdown_vs_duckdb?.jq ? fmtX(rep.slowdown_vs_duckdb.jq.total) : `<span class="muted">–</span>`}</td>
+        <td>${matchPill(rep)}</td><td>${pill(c.status)}</td><td class="r muted">${esc(ago(c.created_at))}</td></tr>`;
+    }).join("")}</tbody></table>` : `<div class="empty"><b>No runs yet</b><span>Runs and benchmark runs appear here.</span></div>`;
+}
+
+/* ---------- datasets ---------- */
+function datasetGroups() {
+  const groups = new Map();
+  for (const d of state.datasets) {
+    const root = d.root_id ?? d.dataset_id;
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(d);
+  }
+  return [...groups.values()]
+    .map((items) => items.sort((a, b) => a.version - b.version))
+    .sort((a, b) => Math.max(...b.map((d) => +new Date(d.created_at))) - Math.max(...a.map((d) => +new Date(d.created_at))));
+}
+
+function datasetRow(d, child) {
+  const isUpload = d.origin !== "generated";
+  const parent = state.datasetsById.get(d.parent_id);
+  const from = parent ? (parent.origin === "version" ? `v${parent.version}` : "the original") : "a deleted dataset";
+  const changes = [d.edits?.length ? `${d.edits.length} field${d.edits.length === 1 ? "" : "s"} edited` : "", d.deleted_rows?.length ? `${d.deleted_rows.length} row${d.deleted_rows.length === 1 ? "" : "s"} removed` : ""].filter(Boolean).join(", ");
+  const sub = d.origin === "version" ? (d.column_mapping ? `columns fixed from ${from}` : `${changes || "edited"} from ${from}`)
+    : d.generation ? settingsText(d.generation) : "your files";
+  const acts = [];
+  if (d.status !== "pending" && Object.keys(d.files).length) acts.push(`<button type="button" class="ibtn" data-act="data" data-id="${esc(d.dataset_id)}" title="View and edit its data" aria-label="View and edit its data">${icon("eye")}</button>`);
+  if (d.status === "ready") acts.push(`<button type="button" class="ibtn" data-act="run" data-id="${esc(d.dataset_id)}" title="Run the pipeline on it" aria-label="Run">${icon("play")}</button>`);
+  if (d.status === "ready" && d.generation) acts.push(`<button type="button" class="ibtn" data-act="bench" data-id="${esc(d.dataset_id)}" title="Benchmark with these settings" aria-label="Benchmark">${icon("chart")}</button>`);
+  if (d.status !== "pending" && isUpload) acts.push(d.status === "failed"
+    ? `<button type="button" class="btn small primary" data-act="columns" data-id="${esc(d.dataset_id)}">Fix columns</button>`
+    : `<button type="button" class="ibtn" data-act="columns" data-id="${esc(d.dataset_id)}" title="Fix columns as a new version" aria-label="Fix columns">${icon("columns")}</button>`);
+  if (d.status !== "pending") acts.push(`<button type="button" class="ibtn del" data-act="del-dataset" data-id="${esc(d.dataset_id)}" title="Delete" aria-label="Delete">${icon("trash")}</button>`);
+  return `<tr class="${child ? "child" : ""}">
+    <td><span class="dsname">${esc(datasetTitle(d.dataset_id))}${d.origin === "version" ? `<span class="tag ver">v${d.version}</span>` : ""}<span class="show-sm">${pill(d.status)}</span></span>
+      <span class="sub">${esc(sub)}</span>${d.error ? `<span class="err-line">${esc(d.error)}</span>` : ""}</td>
+    <td class="hide-sm">${pill(d.status)}</td>
+    <td class="r hide-sm">${fmtN(d.row_counts.trades)}</td>
+    <td class="r hide-sm">${fmtBytes((d.size_bytes.parquet ?? 0) + (d.size_bytes.csv ?? 0))}</td>
+    <td class="r muted hide-sm">${esc(ago(d.created_at))}</td>
+    <td class="acts"><div>${acts.join("")}</div></td></tr>`;
+}
+
+function renderDatasets() {
+  const ready = state.datasets.filter((d) => d.status === "ready");
+  $("#count-datasets").textContent = ready.length || "";
+  const groups = datasetGroups();
+  $("#ds-table").innerHTML = groups.length ? `<table>
+    <thead><tr><th>Dataset</th><th class="hide-sm">Status</th><th class="r hide-sm">Trades</th><th class="r hide-sm">On disk</th><th class="r hide-sm">Created</th><th></th></tr></thead>
+    <tbody>${groups.map((items) => items.map((d, i) => datasetRow(d, i > 0)).join("")).join("")}</tbody></table>`
+    : `<div class="empty"><b>No datasets yet</b><span>Generate synthetic trades or upload your own files.</span><button type="button" class="btn small primary" data-open="dataset">New dataset</button></div>`;
+
+  const select = $("#r-dataset"), current = select.value;
+  select.innerHTML = ready.length
+    ? ready.map((d) => `<option value="${esc(d.dataset_id)}">${esc(datasetTitle(d.dataset_id))}${d.generation ? ` · ${esc(settingsText(d.generation))}` : ""}</option>`).join("")
+    : `<option value="">No datasets ready yet</option>`;
+  if ([...select.options].some((o) => o.value === current)) select.value = current;
+  $("#run-submit").disabled = !ready.length;
+}
+
+/* ---------- runs ---------- */
+function engineTime(rep, engine) {
+  const r = rep.runs.find((x) => x.engine === engine);
+  if (!r) return `<span class="muted">–</span>`;
+  return r.status === "succeeded" ? fmtS(r.total_seconds) : `<span class="muted">${esc(STATUS[r.status]?.[0] ?? r.status)}</span>`;
+}
+function matchPill(rep) {
+  if (rep.equivalent === true) return `<span class="pill tone-good">Match</span>`;
+  if (rep.equivalent === false) return `<span class="pill tone-bad">Differ</span>`;
+  return `<span class="muted">–</span>`;
+}
+function stageBar(run, scale) {
+  return `<div class="sbar" role="img" aria-label="${esc(ENGINE[run.engine])} time per stage">${STAGES.map((s) => {
+    const t = run.stages[s];
+    return t ? `<span title="${s}: ${fmtS(t.wall_seconds)} · ${fmtN(t.rows_out)} rows · ${fmtMB(t.peak_rss_mb)} peak" style="width:${(t.wall_seconds / scale) * 100}%;background:var(--st-${s})"></span>` : "";
+  }).join("")}</div>`;
+}
+const legend = () => `<div class="legend">${STAGES.map((s) => `<span><i style="background:var(--st-${s})"></i>${s}</span>`).join("")}</div>`;
+
+function filterText(p) {
+  const parts = [];
+  if (p.trade_date_from || p.trade_date_to) parts.push(`dates ${p.trade_date_from ?? "…"} to ${p.trade_date_to ?? "…"}`);
+  if (p.instrument_types?.length) parts.push(p.instrument_types.join(", "));
+  if (p.min_notional_usd != null) parts.push(`≥ ${fmtN(p.min_notional_usd)} USD`);
+  if (p.latest_only) parts.push("latest only");
+  return parts.join(" · ");
+}
+
+function runDetail(rep) {
+  const c = rep.comparison, v = c.verification;
+  const scale = Math.max(...rep.runs.map((r) => r.total_seconds), 0.001);
+  const q = rep.runs.find((r) => r.quality)?.quality;
+  const gap = rep.slowdown_vs_duckdb?.jq;
+  const verdict = rep.equivalent === true ? `Outputs match: compared ${v.checks.map((k) => `${fmtN(k.compared_docs)} ${k.output}`).join(", ")}${v.sampled ? " (a sample)" : ""}.`
+    : rep.equivalent === false ? "" : c.engines.length < 2 ? "One engine, so there was nothing to compare." : !c.verify ? "The output check was turned off." : c.status === "completed" ? (c.note ?? "") : "";
+  const reasons = Object.entries(q?.error_counts ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const biggest = gap ? STAGES.filter((s) => gap[s] != null).sort((a, b) => gap[b] - gap[a])[0] : null;
+  return `<div class="detail">
+    <div class="erows">${rep.runs.map((r) => `
+      <span class="etag ${r.engine}">${ENGINE[r.engine]}</span>${stageBar(r, scale)}
+      <span class="emetric">${r.status === "succeeded" ? `<b>${fmtS(r.total_seconds)}</b><small>${fmtMB(r.peak_rss_mb)} peak · ${r.cpu_utilization} cores</small>` : `<b>${pill(r.status)}</b><small>${r.current_stage ? esc(r.current_stage) : ""}</small>`}</span>
+      ${r.error ? `<div class="error" style="grid-column:1/-1">${esc(r.error)}</div>` : ""}`).join("")}</div>
+    ${legend()}
+    ${gap || verdict ? `<div class="verdict">${gap ? `<span><b>jq took ${fmtX(gap.total)} longer.</b>${biggest ? ` Biggest gap in ${esc(biggest)}.` : ""}</span>` : ""}${verdict ? `<span>${esc(verdict)}</span>` : ""}</div>` : ""}
+    ${rep.equivalent === false ? `<div class="error">${esc(v.checks.filter((k) => k.mismatched_docs || !k.keys_match || k.left_rows !== k.right_rows).map((k) => `${k.output}: ${k.left_rows} vs ${k.right_rows} rows, ${k.mismatched_docs} documents differ`).join("\n"))}</div>` : ""}
+    ${q ? `<div><div class="section-label">Data quality</div><div class="facts">
+      <div class="fact"><span>Rows in</span><b>${fmtN(q.raw_rows)}</b></div>
+      <div class="fact"><span>Duplicates</span><b>${fmtN(q.duplicates_removed)}</b></div>
+      <div class="fact"><span>Rejected</span><b>${fmtN(q.rejected_rows)}</b></div>
+      <div class="fact"><span>Documents out</span><b>${fmtN(q.output_rows)}</b></div>
+      <div class="fact"><span>Exposure groups</span><b>${fmtN(q.exposure_groups)}</b></div></div></div>` : ""}
+    ${reasons.length ? `<div><div class="section-label">Top reject reasons</div><div class="reasons">${reasons.map(([code, n]) => `<span class="tag" title="${esc(code)}">${esc(code.replace(/^E_/, "").toLowerCase().replaceAll("_", " "))} · ${fmtN(n)}</span>`).join("")}</div></div>` : ""}
+    ${rep.runs.some((r) => r.outputs.length) ? `<div><div class="section-label">Output files</div><div class="files">${rep.runs.filter((r) => r.outputs.length).map((r) => `<div><span class="etag ${r.engine}">${ENGINE[r.engine]}</span>
+      ${["trades", "rejects", "exposures"].some((o) => r.outputs.includes(o)) ? `<button type="button" class="btn small link" data-browse="${esc(r.run_id)}">Browse</button>` : ""}
+      ${r.outputs.includes("row_status") ? `<a class="btn small link" href="/tracker#run=${encodeURIComponent(r.run_id)}">Track rows</a>` : ""}
+      ${r.outputs.filter((o) => OUTPUT_LABEL[o]).map((o) => `<button type="button" class="btn small link" data-preview="${esc(r.run_id)}" data-output="${esc(o)}">${OUTPUT_LABEL[o]}</button>`).join("")}</div>`).join("")}</div></div>` : ""}
+    <div class="meta"><a href="#rules">rules version ${c.rules_version}</a><span class="id">${esc(c.comparison_id)}</span><span class="id">${esc(c.dataset_id)}</span></div>
+  </div>`;
+}
+
+function runRow(rep) {
+  const c = rep.comparison, open = expanded.runs.has(c.comparison_id);
+  const sub = [c.source_format, filterText(c.params), c.parallel_engines ? "engines at the same time" : "", c.rules_version ? `rules v${c.rules_version}` : ""].filter(Boolean).join(" · ");
+  return `<li class="${open ? "open" : ""}" data-row="runs" data-id="${esc(c.comparison_id)}">
+    <div class="row-main run-grid">
+      <div class="cell-title"><b>${esc(datasetTitle(c.dataset_id))} ${pill(c.status)}</b><small>${esc(sub)}</small></div>
+      <div class="cell-r hide-sm">${engineTime(rep, "duckdb")}</div>
+      <div class="cell-r hide-sm">${engineTime(rep, "jq")}</div>
+      <div class="cell-r hide-sm">${rep.slowdown_vs_duckdb?.jq ? fmtX(rep.slowdown_vs_duckdb.jq.total) : `<span class="muted">–</span>`}</div>
+      <div class="hide-sm">${matchPill(rep)}</div>
+      <div class="cell-r muted hide-sm">${esc(ago(c.created_at))}</div>
+      <div class="cell-acts">
+        <button type="button" class="ibtn del" data-act="del-run" data-id="${esc(c.comparison_id)}" title="Delete run" aria-label="Delete run">${icon("trash")}</button>
+        <button type="button" class="ibtn" data-toggle aria-expanded="${open}" aria-label="Show details">${icon("chevron")}</button>
+      </div>
+    </div>
+    ${open ? runDetail(rep) : ""}
+  </li>`;
+}
+
+function renderRuns() {
+  const own = state.comparisons.filter((rep) => !rep.comparison.benchmark_id);
+  $("#count-runs").textContent = own.length || "";
+  if (!touched.runs && own[0]) expanded.runs.add(own[0].comparison.comparison_id);
+  $("#runs-card").innerHTML = own.length ? `
+    <div class="rows-head run-grid"><span>Dataset</span><span class="cell-r">DuckDB</span><span class="cell-r">jq</span><span class="cell-r">jq vs DuckDB</span><span>Outputs</span><span class="cell-r">When</span><span></span></div>
+    <ul class="rows">${own.slice(0, 50).map(runRow).join("")}</ul>`
+    : `<div class="empty"><b>No runs yet</b><span>Start one on any dataset. Benchmark runs are listed under Benchmarks.</span><button type="button" class="btn small primary" data-open="run">New run</button></div>`;
+}
+
+/* ---------- benchmarks ---------- */
+function benchSubtitle(b) {
+  return `${b.engines.map((e) => ENGINE[e]).join(" and ")} · ${b.source_format} · ${settingsText(b.specs[0])}`;
+}
+function findRow(rep, engine, size) {
+  return rep.rows.find((x) => x.engine === engine && Math.abs(x.rows - size) <= Math.max(1, size * 0.001));
+}
+function benchChart(rep) {
+  const max = Math.max(...rep.rows.map((r) => r.total_seconds), 0.001);
+  const sizes = [...new Set(rep.benchmark.specs.map((s) => s.rows))];
+  return `<div class="bchart" role="img" aria-label="Total time per size and engine">${sizes.map((size, gi) => rep.benchmark.engines.map((engine, i) => {
+    const r = findRow(rep, engine, size);
+    const value = !r ? `<span class="muted">waiting</span>` : r.status === "succeeded"
+      ? `${fmtS(r.total_seconds)}${r.engine === "jq" && r.slowdown_vs_duckdb ? ` <small>${fmtX(r.slowdown_vs_duckdb)}</small>` : ""}` : pill(r.status);
+    return `<span class="size">${i === 0 ? sizeLabel(size) : ""}</span><span class="etag ${engine}">${ENGINE[engine]}</span>
+      <div class="track"><div class="fill ${engine}" style="width:${r && r.status === "succeeded" ? (r.total_seconds / max) * 100 : 0}%"></div></div><span class="val">${value}</span>`;
+  }).join("") + (gi < sizes.length - 1 ? `<span class="gap"></span>` : "")).join("")}</div>`;
+}
+function benchTable(rep) {
+  return `<details class="table"><summary>Stage-by-stage numbers</summary><div class="table-wrap"><table>
+    <thead><tr><th class="r">Trades</th><th>Engine</th>${STAGES.map((s) => `<th class="r">${s}</th>`).join("")}<th class="r">Total</th><th class="r">Peak memory</th><th class="r">Rows/s</th><th class="r">vs DuckDB</th><th>Outputs</th><th></th></tr></thead>
+    <tbody>${rep.rows.map((r) => `<tr>
+      <td class="r">${fmtN(r.rows)}</td><td><span class="etag ${r.engine}">${ENGINE[r.engine]}</span>${r.error ? `<span class="sub" style="color:var(--bad)">${esc(r.error)}</span>` : ""}</td>
+      ${STAGES.map((s) => `<td class="r">${fmtS(r.stage_seconds[s])}</td>`).join("")}
+      <td class="r"><b>${r.status === "succeeded" ? fmtS(r.total_seconds) : STATUS[r.status]?.[0] ?? r.status}</b></td>
+      <td class="r">${fmtMB(r.peak_rss_mb)}</td><td class="r">${fmtN(r.rows_per_second)}</td>
+      <td class="r">${r.slowdown_vs_duckdb ? fmtX(r.slowdown_vs_duckdb) : "–"}</td>
+      <td>${r.equivalent == null ? "–" : r.equivalent ? `<span class="pill tone-good">Match</span>` : `<span class="pill tone-bad">Differ</span>`}</td>
+      <td>${r.status === "succeeded" ? `<a href="/tracker#run=${encodeURIComponent(r.run_id)}">Track rows</a>` : ""}</td></tr>`).join("")}</tbody></table></div></details>`;
+}
+function benchSummary(rep) {
+  const b = rep.benchmark;
+  if (ACTIVE.has(b.status)) {
+    const done = rep.rows.filter((r) => r.status === "succeeded" || r.status === "failed").length;
+    return `<span class="muted">${done} of ${b.specs.length * b.engines.length} runs done</span>`;
+  }
+  const biggest = Math.max(...b.specs.map((s) => s.rows));
+  const duck = findRow(rep, "duckdb", biggest), jq = findRow(rep, "jq", biggest);
+  if (duck?.status === "succeeded" && jq?.status === "succeeded") return `<span><b>jq ${fmtX(jq.slowdown_vs_duckdb)} slower</b> <span class="muted">at ${sizeLabel(biggest)}: ${fmtS(duck.total_seconds)} vs ${fmtS(jq.total_seconds)}</span></span>`;
+  const only = duck ?? jq;
+  return only?.status === "succeeded" ? `<span class="muted">${sizeLabel(biggest)} in ${fmtS(only.total_seconds)}</span>` : `<span class="muted">–</span>`;
+}
+function benchRow(rep) {
+  const b = rep.benchmark, open = expanded.bench.has(b.benchmark_id);
+  return `<li class="${open ? "open" : ""}" data-row="bench" data-id="${esc(b.benchmark_id)}">
+    <div class="row-main bench-grid">
+      <div class="cell-title"><b>${esc(b.specs.map((s) => sizeLabel(s.rows)).join(", "))} trades</b><small>${esc(benchSubtitle(b))}</small></div>
+      <div class="hide-sm">${pill(b.status)}</div>
+      <div class="hide-sm">${benchSummary(rep)}</div>
+      <div class="cell-r muted hide-sm">${esc(ago(b.created_at))}</div>
+      <div class="cell-acts">
+        <a class="ibtn" href="/api/benchmarks/${encodeURIComponent(b.benchmark_id)}/report.md" target="_blank" rel="noopener" title="Markdown report" aria-label="Markdown report">${icon("doc")}</a>
+        <button type="button" class="ibtn del" data-act="del-bench" data-id="${esc(b.benchmark_id)}" title="Delete benchmark" aria-label="Delete benchmark">${icon("trash")}</button>
+        <button type="button" class="ibtn" data-toggle aria-expanded="${open}" aria-label="Show details">${icon("chevron")}</button>
+      </div>
+    </div>
+    ${open ? `<div class="detail">
+      ${b.error ? `<div class="error">${esc(b.error)}</div>` : ""}
+      ${rep.rows.length || ACTIVE.has(b.status) ? benchChart(rep) : ""}
+      ${rep.rows.length ? benchTable(rep) : ""}
+      <div class="meta"><span class="id">${esc(b.benchmark_id)}</span><span>${b.discard_outputs ? "large output files deleted after each size" : "output files kept"}</span></div>
+    </div>` : ""}
+  </li>`;
+}
+function renderBenchmarks() {
+  $("#count-benchmarks").textContent = state.benchmarks.length || "";
+  if (!touched.bench && state.benchmarks[0]) expanded.bench.add(state.benchmarks[0].benchmark.benchmark_id);
+  $("#bench-card").innerHTML = state.benchmarks.length ? `
+    <div class="rows-head bench-grid"><span>Sizes</span><span>Status</span><span>Result at the largest size</span><span class="cell-r">When</span><span></span></div>
+    <ul class="rows">${state.benchmarks.slice(0, 30).map(benchRow).join("")}</ul>`
+    : `<div class="empty"><b>No benchmarks yet</b><span>Pick sizes and engines to see how each one scales.</span><button type="button" class="btn small primary" data-open="bench">New benchmark</button></div>`;
+}
+
+/* ---------- refresh ---------- */
+const openTables = () => new Set([...document.querySelectorAll("[data-row='bench'] details[open]")].map((d) => d.closest("li").dataset.id));
+let refreshTimer = null;
+function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(refresh, 250); }
+async function refresh() {
+  try {
+    const [datasets, comparisons, benchmarks] = await Promise.all([api("/api/datasets"), api("/api/comparisons"), api("/api/benchmarks")]);
+    Object.assign(state, { datasets, comparisons, benchmarks, datasetsById: new Map(datasets.map((d) => [d.dataset_id, d])) });
+    state.runIndex = new Map(comparisons.flatMap((rep) => rep.runs.map((r) => [r.run_id, { engine: r.engine, dataset: rep.comparison.dataset_id }])));
+    const keepOpen = openTables();
+    renderOverview(); renderDatasets(); renderRuns(); renderBenchmarks();
+    if (location.hash === "#data") renderExplorerPickers();
+    keepOpen.forEach((id) => document.querySelector(`[data-row='bench'][data-id="${CSS.escape(id)}"] details`)?.setAttribute("open", ""));
+  } catch (err) {
+    console.error("refresh failed", err);
+  }
+}
+
+/* ---------- activity ---------- */
+function describe(type, d) {
+  const run = state.runIndex.get(d.run_id);
+  // a brand-new run can be ahead of the last refresh; its id still starts with the engine
+  const engine = run?.engine ?? String(d.run_id ?? "").match(/^run-(duckdb|jq)-/)?.[1];
+  const who = run ? `${ENGINE[run.engine]} on ${datasetTitle(run.dataset)}` : engine ? ENGINE[engine] : d.run_id;
+  switch (type) {
+    case "DatasetGenerationRequested": return `Creating dataset: ${fmtN(d.spec.rows)} trades, ${settingsText(d.spec)}`;
+    case "DatasetUploaded": return `Files uploaded, checking ${d.dataset_id}`;
+    case "DatasetVersionRequested": return `Creating ${d.dataset_id} with fixed columns`;
+    case "DatasetReady": return `Dataset ready: ${datasetTitle(d.dataset_id)}`;
+    case "DatasetFailed": return `Dataset failed: ${d.error}`;
+    case "RunStarted": return `${who}: started`;
+    case "StageStarted": return `${who}: ${d.stage} started`;
+    case "StageCompleted": return `${who}: ${d.metrics.stage} done in ${fmtS(d.metrics.wall_seconds)}, ${fmtN(d.metrics.rows_out)} rows, ${fmtMB(d.metrics.peak_rss_mb)} peak`;
+    case "RunFinished": return d.outcome.succeeded ? `${who}: finished in ${fmtS(d.outcome.stages.reduce((a, s) => a + s.wall_seconds, 0))}` : `${who}: failed: ${d.outcome.error}`;
+    case "OutputsDiscarded": return `${who}: large output files deleted`;
+    case "ComparisonRequested": return "Run requested";
+    case "ComparisonStarted": return "Run started";
+    case "VerificationStarted": return "Checking that the outputs match";
+    case "ComparisonCompleted": return d.verification ? (d.verification.checks.every((k) => k.left_rows === k.right_rows && k.keys_match && !k.mismatched_docs) && d.verification.quality_reports_match ? "Run done: outputs match" : "Run done: outputs differ") : `Run done${d.note ? `: ${d.note}` : ""}`;
+    case "BenchmarkRequested": return "Benchmark requested";
+    case "BenchmarkProgressed": return "Benchmark: next size started";
+    case "BenchmarkCompleted": return d.error ? `Benchmark failed: ${d.error}` : "Benchmark finished";
+    case "RulesChanged": return `Rules saved as version ${d.version}; new runs use it`;
+    case "RecordsDeleted": return d.kind === "history" ? `History cleared (${d.ids.length} items)` : `Deleted ${d.kind} ${d.ids.join(", ")}`;
+    default: return type;
+  }
+}
+function logEvent(type, data) {
+  $("#log-empty").hidden = true;
+  const li = document.createElement("li");
+  li.innerHTML = `<time>${new Date(data.occurred_at).toLocaleTimeString("en-GB")}</time><span>${esc(describe(type, data))}<span class="kind">${esc(type)}</span></span>`;
+  $("#log").prepend(li);
+  while ($("#log").childElementCount > 300) $("#log").lastChild.remove();
+}
+function connect() {
+  const source = new EventSource("/api/events");
+  source.onopen = () => { $("#dot").classList.add("on"); $("#live-label").textContent = "live"; };
+  source.onerror = () => { $("#dot").classList.remove("on"); $("#live-label").textContent = "reconnecting"; };
+  const types = ["DatasetGenerationRequested", "DatasetUploaded", "DatasetVersionRequested", "DatasetReady", "DatasetFailed", "RunStarted",
+    "StageStarted", "StageCompleted", "RunFinished", "OutputsDiscarded", "ComparisonRequested", "ComparisonStarted", "VerificationStarted",
+    "ComparisonCompleted", "BenchmarkRequested", "BenchmarkProgressed", "BenchmarkCompleted", "RecordsDeleted", "RulesChanged"];
+  for (const type of types) source.addEventListener(type, (e) => {
+    logEvent(type, JSON.parse(e.data));
+    if (type === "RulesChanged") loadRules(); else scheduleRefresh();
+  });
+}
+
+/* ---------- panels ---------- */
+const PANELS = { dataset: "#panel-dataset", run: "#panel-run", bench: "#panel-bench", columns: "#panel-columns" };
+function openPanel(name) {
+  const panel = $(PANELS[name]);
+  say(panel, "");
+  if (!panel.open) panel.showModal();
+  return panel;
+}
+function say(panel, text, isError = false) { const msg = $(".msg", panel); msg.textContent = text; msg.className = `msg${isError ? " err" : ""}`; }
+async function busy(button, panel, work) {
+  button.disabled = true;
+  say(panel, "");
+  try { await work(); }
+  catch (err) { say(panel, err.message, true); }
+  finally { button.disabled = false; $("#run-submit").disabled = !state.datasets.some((d) => d.status === "ready"); }
+}
+const settingsFrom = (f) => ({
+  seed: +f.get("seed"), dirty_rate: +f.get("dirty_pct") / 100,
   hierarchy_depth: +f.get("hierarchy_depth"), max_chain_length: +f.get("max_chain_length"),
-}));
-$("#presets").addEventListener("click", async () => {
-  const f = new FormData($("#gen-form"));
-  await post("/api/datasets/presets", { seed: +f.get("seed"), dirty_rate: +f.get("dirty_rate") });
-  refresh();
 });
-withButton($("#upload-form"), (f) => {
-  for (const [key, value] of [...f.entries()]) if (value instanceof File && !value.name) f.delete(key);
-  return api("/api/datasets/upload", { method: "POST", body: f });
-});
-withButton($("#cmp-form"), (f) => post("/api/comparisons", {
-  dataset_id: f.get("dataset_id"),
-  source_format: f.get("source_format"),
-  engines: ["duckdb", "jq"].filter((e) => f.get(e)),
-  verify: !!f.get("verify"),
-  parallel_engines: !!f.get("parallel_engines"),
-  params: {
-    trade_date_from: f.get("trade_date_from") || null,
-    trade_date_to: f.get("trade_date_to") || null,
-    instrument_types: f.get("instrument_types") ? f.get("instrument_types").split(",").map((s) => s.trim()).filter(Boolean) : null,
-    min_notional_usd: f.get("min_notional_usd") ? +f.get("min_notional_usd") : null,
-    latest_only: !!f.get("latest_only"),
-  },
-}));
-withButton($("#bench-form"), (f) => post("/api/benchmarks", { sizes: f.getAll("size"), source_format: f.get("source_format") }));
+const enginesFrom = (f) => {
+  const engines = ["duckdb", "jq"].filter((e) => f.get(e));
+  if (!engines.length) throw new Error("Pick at least one engine.");
+  return engines;
+};
 
-document.addEventListener("click", async (event) => {
-  const link = event.target.closest("a[data-run]");
-  if (!link) return;
+// dataset panel: generate or upload
+let datasetMode = "generate";
+document.querySelectorAll("[data-seg]").forEach((b) => b.addEventListener("click", () => {
+  datasetMode = b.dataset.seg;
+  document.querySelectorAll("[data-seg]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  document.querySelectorAll("[data-seg-pane]").forEach((p) => { p.hidden = p.dataset.segPane !== datasetMode; });
+  $("#dataset-submit").textContent = datasetMode === "generate" ? "Create dataset" : "Upload";
+}));
+$("#dataset-submit").addEventListener("click", () => {
+  const panel = $("#panel-dataset");
+  busy($("#dataset-submit"), panel, async () => {
+    if (datasetMode === "generate") {
+      const f = new FormData($("#gen-form"));
+      const d = await post("/api/datasets/generate", { rows: parseSize(f.get("rows")), ...settingsFrom(f) });
+      panel.close();
+      toast(d.status === "ready" ? `${datasetTitle(d.dataset_id)} already exists, so it was reused.` : `Creating ${fmtN(d.generation.rows)} trades.`);
+    } else {
+      const form = $("#upload-form");
+      if (!form.reportValidity()) return;
+      const f = new FormData(form);
+      for (const [key, value] of [...f.entries()]) if (value instanceof File && !value.name) f.delete(key);
+      const d = await api("/api/datasets/upload", { method: "POST", body: f });
+      panel.close();
+      form.reset();
+      toast(`Uploaded. Checking ${d.dataset_id} now.`);
+    }
+    location.hash = "datasets";
+    await refresh();
+  });
+});
+$("#presets").addEventListener("click", () => {
+  const panel = $("#panel-dataset");
+  busy($("#presets"), panel, async () => {
+    await post("/api/datasets/presets", { sizes: ["5k", "50k", "500k"], ...settingsFrom(new FormData($("#gen-form"))) });
+    panel.close();
+    toast("Creating 5k, 50k and 500k. Existing ones are reused.");
+    location.hash = "datasets";
+    await refresh();
+  });
+});
+
+$("#run-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  const { run, output } = link.dataset;
-  const data = await api(`/api/runs/${run}/outputs/${output}?limit=3`);
-  $("#preview-title").textContent = `${run} · ${output} (first documents)`;
-  $("#preview").textContent = JSON.stringify(data, null, 2);
-  $("#preview-section").hidden = false;
-  $("#preview-section").scrollIntoView({ behavior: "smooth" });
+  const panel = $("#panel-run"), f = new FormData(event.target);
+  busy($("#run-submit"), panel, async () => {
+    const engines = enginesFrom(f);
+    const types = String(f.get("instrument_types") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const rep = await post("/api/comparisons", {
+      dataset_id: f.get("dataset_id"), engines, source_format: f.get("source_format"),
+      verify: !!f.get("verify"), parallel_engines: !!f.get("parallel_engines"),
+      params: {
+        trade_date_from: f.get("trade_date_from") || null, trade_date_to: f.get("trade_date_to") || null,
+        instrument_types: types.length ? types : null,
+        min_notional_usd: f.get("min_notional_usd") ? +f.get("min_notional_usd") : null,
+        latest_only: !!f.get("latest_only"),
+      },
+    });
+    panel.close();
+    expanded.runs.add(rep.comparison.comparison_id);
+    toast(`Started ${engines.map((e) => ENGINE[e]).join(" and ")} on ${datasetTitle(rep.comparison.dataset_id)}.`);
+    location.hash = "runs";
+    await refresh();
+  });
 });
 
+$("#bench-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const panel = $("#panel-bench"), f = new FormData(event.target);
+  busy($("#bench-submit"), panel, async () => {
+    const engines = enginesFrom(f);
+    const custom = String(f.get("custom_sizes") || "").split(/[,\s]+/).filter(Boolean).map(parseSize);
+    const sizes = [...new Set([...f.getAll("size").map(parseSize), ...custom])].sort((a, b) => a - b);
+    if (!sizes.length) throw new Error("Pick at least one size.");
+    const { benchmark: b } = await post("/api/benchmarks", {
+      sizes, engines, ...settingsFrom(f), source_format: f.get("source_format"),
+      verify: !!f.get("verify"), discard_outputs: !f.get("keep_outputs"),
+    });
+    panel.close();
+    expanded.bench.add(b.benchmark_id);
+    toast(`Benchmark started: ${sizes.map(sizeLabel).join(", ")} trades with ${engines.map((e) => ENGINE[e]).join(" and ")}.`);
+    location.hash = "benchmarks";
+    await refresh();
+  });
+});
+
+/* ---------- fix columns ---------- */
+let mapping = null;   // { datasetId, entities }
+async function openColumns(d) {
+  openPanel("columns");
+  const version = nextVersion(d);
+  $("#pc-title").textContent = `Fix columns: ${datasetTitle(d.dataset_id)}`;
+  $("#pc-sub").textContent = `Match each expected column to a column in your files. Saving creates v${version}; this one stays as it is.`;
+  $("#pc-save").textContent = `Save as v${version}`;
+  $("#pc-save").disabled = true;
+  $("#pc-body").innerHTML = `<p class="muted">Reading the files…</p>`;
+  try {
+    const entities = await api(`/api/datasets/${encodeURIComponent(d.dataset_id)}/columns`);
+    mapping = { datasetId: d.dataset_id, entities };
+    $("#pc-body").innerHTML = `${d.error ? `<div class="error">${esc(d.error)}</div>` : ""}
+      <p class="note">Matches are suggested from the names. A column left empty is filled with nothing, so trades that need it may be rejected. Columns that aren't listed are dropped.</p>
+      ${entities.map(mapSection).join("")}`;
+    $("#pc-save").disabled = false;
+    updateMapCounts();
+  } catch (err) {
+    $("#pc-body").innerHTML = `<div class="error">${esc(err.message)}</div>`;
+  }
+}
+function sampleText(entity, column) {
+  return column ? (entity.samples[column] ?? []).map((v) => v ?? "null").join(" · ") : "";
+}
+function mapSection(e) {
+  return `<div class="mapsec" data-entity="${esc(e.entity)}">
+    <div class="mapsec-head"><b>${esc(e.entity.replace("_", " "))}</b><span class="id">${esc(e.file)}</span><span class="map-count" style="margin-left:auto"></span></div>
+    ${e.expected.map((col) => {
+      const chosen = e.suggested[col], required = col === "trade_id" && e.entity === "trades";
+      return `<div class="maprow${chosen ? "" : " unset"}${required ? " required" : ""}">
+        <span class="col">${esc(col)}${required ? `<small class="req">required</small>` : chosen && chosen !== col ? `<small>from ${esc(chosen)}</small>` : ""}</span>
+        <select class="map-select" data-col="${esc(col)}" aria-label="Column for ${esc(col)}">
+          <option value="">(leave empty)</option>
+          ${e.found.map((src) => `<option value="${esc(src)}"${src === chosen ? " selected" : ""}>${esc(src)}</option>`).join("")}
+        </select>
+        <span class="sample" title="First values in the chosen column">${esc(sampleText(e, chosen))}</span>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+function updateMapCounts() {
+  document.querySelectorAll("#pc-body .mapsec").forEach((sec) => {
+    const empty = [...sec.querySelectorAll(".map-select")].filter((s) => !s.value).length;
+    $(".map-count", sec).innerHTML = empty ? `<span class="pill tone-warn">${empty} left empty</span>` : `<span class="pill tone-good">all matched</span>`;
+  });
+}
+$("#pc-body").addEventListener("change", (e) => {
+  const select = e.target.closest(".map-select");
+  if (!select) return;
+  const entity = mapping.entities.find((x) => x.entity === select.closest(".mapsec").dataset.entity);
+  const row = select.closest(".maprow");
+  row.classList.toggle("unset", !select.value);
+  $(".sample", row).textContent = sampleText(entity, select.value);
+  updateMapCounts();
+});
+$("#pc-save").addEventListener("click", () => {
+  const panel = $("#panel-columns");
+  busy($("#pc-save"), panel, async () => {
+    const body = {};
+    document.querySelectorAll("#pc-body .mapsec").forEach((sec) => {
+      body[sec.dataset.entity] = Object.fromEntries([...sec.querySelectorAll(".map-select")].map((s) => [s.dataset.col, s.value || null]));
+    });
+    const d = await post(`/api/datasets/${encodeURIComponent(mapping.datasetId)}/versions`, { mapping: body });
+    panel.close();
+    toast(`Creating v${d.version}. It shows as Ready once the files are written and checked.`);
+    location.hash = "datasets";
+    await refresh();
+  });
+});
+
+/* ---------- actions ---------- */
+async function remove(path, title, text, done) {
+  if (!(await confirmDelete(title, text))) return;
+  try { await del(path); toast(done); await refresh(); }
+  catch (err) { toast(err.message, true); }
+}
+document.addEventListener("click", async (event) => {
+  const opener = event.target.closest("[data-open]");
+  if (opener) { openPanel(opener.dataset.open); return; }
+  const closer = event.target.closest("[data-close]");
+  if (closer) { closer.closest("dialog").close(); return; }
+
+  const act = event.target.closest("[data-act]");
+  if (act) {
+    const id = act.dataset.id, d = state.datasetsById.get(id);
+    switch (act.dataset.act) {
+      case "run":
+        $("#r-dataset").value = id;
+        openPanel("run");
+        return;
+      case "bench": {
+        const form = $("#bench-form"), spec = d.generation;
+        const preset = Object.entries(SIZE_PRESETS).find(([, rows]) => rows === spec.rows)?.[0];
+        form.querySelectorAll('input[name="size"]').forEach((box) => { box.checked = box.value === preset; });
+        form.elements.custom_sizes.value = preset ? "" : String(spec.rows);
+        form.elements.seed.value = spec.seed;
+        form.elements.dirty_pct.value = +(spec.dirty_rate * 100).toFixed(2);
+        form.elements.hierarchy_depth.value = spec.hierarchy_depth;
+        form.elements.max_chain_length.value = spec.max_chain_length;
+        say(openPanel("bench"), `Settings copied from ${datasetTitle(id)}.`);
+        return;
+      }
+      case "columns": openColumns(d); return;
+      case "data": openData("input", id); return;
+      case "del-dataset": remove(`/api/datasets/${encodeURIComponent(id)}`, `Delete ${datasetTitle(id)}?`,
+        "The dataset and its files are removed. Finished runs on it stay in the history. This can't be undone.", "Dataset deleted."); return;
+      case "del-run": remove(`/api/comparisons/${encodeURIComponent(id)}`, "Delete this run?",
+        "Its results and output files are removed. This can't be undone.", "Run deleted."); return;
+      case "del-bench": {
+        const rep = state.benchmarks.find((x) => x.benchmark.benchmark_id === id);
+        remove(`/api/benchmarks/${encodeURIComponent(id)}`, "Delete this benchmark?",
+          `Its ${rep?.rows.length ?? 0} runs and their output files are removed too. This can't be undone.`, "Benchmark deleted.");
+        return;
+      }
+    }
+    return;
+  }
+
+  const main = event.target.closest(".row-main");
+  if (main && (event.target.closest("[data-toggle]") || !event.target.closest("a, button"))) {
+    const li = main.closest("li[data-row]"), set = expanded[li.dataset.row];
+    touched[li.dataset.row] = true;
+    if (set.has(li.dataset.id)) set.delete(li.dataset.id); else set.add(li.dataset.id);
+    if (li.dataset.row === "runs") renderRuns(); else renderBenchmarks();
+    return;
+  }
+
+  const browse = event.target.closest("[data-browse]");
+  if (browse) { openData("output", browse.dataset.browse); return; }
+  const preview = event.target.closest("[data-preview]");
+  if (preview) {
+    const { preview: run, output } = preview.dataset, info = state.runIndex.get(run);
+    $("#pv-title").textContent = `${OUTPUT_LABEL[output]}${info ? ` · ${ENGINE[info.engine]} · ${datasetTitle(info.dataset)}` : ""}`;
+    $("#pv-sub").textContent = output === "quality_report" ? "The whole report" : "The first 3 documents";
+    $("#pv-download").href = `/api/runs/${encodeURIComponent(run)}/outputs/${encodeURIComponent(output)}/download`;
+    $("#pv-body").textContent = "Loading…";
+    $("#preview").showModal();
+    try { $("#pv-body").textContent = JSON.stringify(await api(`/api/runs/${encodeURIComponent(run)}/outputs/${encodeURIComponent(output)}?limit=3`), null, 2); }
+    catch (err) { $("#pv-body").textContent = `Could not load it: ${err.message}`; }
+  }
+});
+// a click on the dark backdrop closes panels and the preview
+document.querySelectorAll("dialog.panel, dialog.preview").forEach((d) => d.addEventListener("click", (e) => { if (e.target === d) d.close(); }));
+$("#clear-history").addEventListener("click", async () => {
+  if (!(await confirmDelete("Clear all history?", "Every finished run and benchmark is deleted, with its output files. Datasets are kept, and so is anything still running."))) return;
+  try {
+    const r = await del("/api/history");
+    toast(`Deleted ${r.runs} runs and ${r.benchmarks} benchmarks.${r.kept ? ` ${r.kept} still running were kept.` : ""}`);
+    await refresh();
+  } catch (err) { toast(err.message, true); }
+});
+$("#clear-log").addEventListener("click", () => { $("#log").innerHTML = ""; $("#log-empty").hidden = false; });
+document.querySelectorAll("[data-icon]").forEach((b) => { b.innerHTML = icon(b.dataset.icon); });
+
+/* ---------- data explorer ---------- */
+const ENTITIES = ["trades", "counterparties", "instruments", "books", "fx_rates"];
+const XPAGE = 50;
+const enc = encodeURIComponent;
+const put = (path, payload) => api(path, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+const explorer = {
+  mode: "input", dataset: null, entity: "trades", q: "", offset: 0, page: null, review: false,
+  run: null, output: "trades", oq: "", ooffset: 0, opage: null, open: new Set(),
+  changes: new Map(),   // dataset id -> { edits: Map(key -> edit), deletes: Map(key -> row ref) }
+};
+function pending(id = explorer.dataset) {
+  if (!explorer.changes.has(id)) explorer.changes.set(id, { edits: new Map(), deletes: new Map() });
+  return explorer.changes.get(id);
+}
+const browsable = () => state.datasets.filter((d) => d.status !== "pending" && Object.keys(d.files).length);
+const runsWithFiles = () => state.comparisons.flatMap((rep) => rep.runs.filter((r) => ["trades", "rejects", "exposures"].some((o) => r.outputs.includes(o)))
+  .map((r) => ({ ...r, dataset_id: rep.comparison.dataset_id, created_at: rep.comparison.created_at })));
+
+function renderExplorerPickers() {
+  const sets = browsable();
+  if (!explorer.dataset || !sets.some((d) => d.dataset_id === explorer.dataset)) explorer.dataset = sets[0]?.dataset_id ?? null;
+  $("#x-dataset").innerHTML = sets.length
+    ? sets.map((d) => `<option value="${esc(d.dataset_id)}">${esc(datasetTitle(d.dataset_id))}${d.status === "failed" ? " (failed)" : ""}</option>`).join("")
+    : `<option value="">No datasets yet</option>`;
+  if (explorer.dataset) $("#x-dataset").value = explorer.dataset;
+  const d = state.datasetsById.get(explorer.dataset);
+  const tables = ENTITIES.filter((e) => d?.files[e]);
+  if (d && !tables.includes(explorer.entity)) explorer.entity = tables[0] ?? "trades";
+  $("#x-tables").innerHTML = tables.map((e) => `<label class="chip"><input type="radio" name="x-entity" value="${e}"${e === explorer.entity ? " checked" : ""}><span>${e.replace("_", " ")}${d.row_counts[e] != null ? `<span class="n">${fmtN(d.row_counts[e])}</span>` : ""}</span></label>`).join("");
+
+  const runs = runsWithFiles();
+  if (!explorer.run || !runs.some((r) => r.run_id === explorer.run)) explorer.run = runs[0]?.run_id ?? null;
+  $("#o-run").innerHTML = runs.length
+    ? runs.map((r) => `<option value="${esc(r.run_id)}">${esc(ENGINE[r.engine])} · ${esc(datasetTitle(r.dataset_id))} · ${esc(ago(r.created_at))}</option>`).join("")
+    : `<option value="">No runs with output files</option>`;
+  if (explorer.run) $("#o-run").value = explorer.run;
+  const run = runs.find((r) => r.run_id === explorer.run);
+  const counts = { trades: run?.quality?.output_rows, rejects: run?.quality?.rejected_rows, exposures: run?.quality?.exposure_groups };
+  const outs = ["trades", "rejects", "exposures"].filter((o) => run?.outputs.includes(o));
+  if (run && !outs.includes(explorer.output)) explorer.output = outs[0];
+  $("#o-outputs").innerHTML = outs.map((o) => `<label class="chip"><input type="radio" name="o-output" value="${o}"${o === explorer.output ? " checked" : ""}><span>${OUTPUT_LABEL[o]}${counts[o] != null ? `<span class="n">${fmtN(counts[o])}</span>` : ""}</span></label>`).join("");
+}
+
+async function loadTable() {
+  renderExplorerPickers();
+  if (!explorer.dataset) {
+    $("#x-grid").innerHTML = `<div class="empty"><b>No datasets yet</b><span>Create or upload one first.</span><button type="button" class="btn small primary" data-open="dataset">New dataset</button></div>`;
+    $("#x-pager").innerHTML = ""; renderChanges(); return;
+  }
+  const params = new URLSearchParams({ offset: explorer.offset, limit: XPAGE });
+  if (explorer.q) params.set("q", explorer.q);
+  try { explorer.page = await api(`/api/datasets/${enc(explorer.dataset)}/tables/${explorer.entity}?${params}`); }
+  catch (err) { $("#x-grid").innerHTML = `<div class="empty"><b>Can't show this table</b><span>${esc(err.message)}</span></div>`; $("#x-pager").innerHTML = ""; return; }
+  renderTable();
+}
+const cellHtml = (value) => value == null ? `<span class="null">empty</span>` : esc(value);
+
+function renderTable() {
+  const p = explorer.page, ch = pending(), entity = explorer.entity;
+  if (!p.rows.length) {
+    $("#x-grid").innerHTML = `<div class="empty"><b>No rows match</b><span>Try another value or row number.</span></div>`;
+  } else {
+    $("#x-grid").innerHTML = `<table class="grid"><thead><tr><th class="rn">#</th>${p.columns.map((c) => `<th>${esc(c)}</th>`).join("")}<th></th></tr></thead><tbody>
+      ${p.rows.map((row, i) => {
+        const n = p.row_numbers[i], deleted = ch.deletes.has(`${entity}|${n}`);
+        return `<tr class="${deleted ? "deleted" : ""}" data-xrow="${n}" data-i="${i}"><td class="rn">${fmtN(n)}</td>${p.columns.map((col, j) => {
+          const edit = ch.edits.get(`${entity}|${n}|${col}`);
+          return `<td class="cell${edit ? " edited" : ""}" data-col="${esc(col)}" data-j="${j}"${edit ? ` title="was: ${esc(edit.old ?? "empty")}"` : ""}>${cellHtml(edit ? edit.value : row[j])}</td>`;
+        }).join("")}<td class="acts"><button type="button" class="ibtn${deleted ? "" : " del"}" data-xdel="${n}" title="${deleted ? "Keep this row" : "Remove this row"}" aria-label="${deleted ? "Keep this row" : "Remove this row"}">${icon(deleted ? "undo" : "trash")}</button></td></tr>`;
+      }).join("")}</tbody></table>`;
+  }
+  const end = Math.min(p.offset + p.rows.length, p.total);
+  $("#x-pager").innerHTML = `<span>${p.total ? `${fmtN(p.offset + 1)}–${fmtN(end)} of ${fmtN(p.total)} rows` : "0 rows"}${explorer.q ? " matching" : ""} · click a value to change it</span>
+    <div><button type="button" class="btn small" data-xpage="-1"${p.offset === 0 ? " disabled" : ""}>Previous</button><button type="button" class="btn small" data-xpage="1"${end >= p.total ? " disabled" : ""}>Next</button></div>`;
+  renderChanges();
+}
+
+function startEdit(td) {
+  if (td.classList.contains("editing")) return;
+  const tr = td.closest("tr"), n = Number(tr.dataset.xrow), col = td.dataset.col;
+  const original = explorer.page.rows[Number(tr.dataset.i)][Number(td.dataset.j)];
+  const current = pending().edits.get(`${explorer.entity}|${n}|${col}`);
+  const value = current ? current.value : original;
+  td.classList.add("editing");
+  td.innerHTML = `<input aria-label="New value for ${esc(col)}, row ${n}" value="${esc(value ?? "")}" placeholder="empty">`;
+  const input = $("input", td);
+  input.focus(); input.select();
+  let done = false;
+  const finish = (save) => {
+    if (done) return; done = true;
+    if (save) {
+      const next = input.value === "" ? null : input.value, key = `${explorer.entity}|${n}|${col}`;
+      if (next === original) pending().edits.delete(key);
+      else pending().edits.set(key, { entity: explorer.entity, row: n, column: col, old: original, value: next });
+    }
+    renderTable();
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") finish(true); if (e.key === "Escape") finish(false); });
+  input.addEventListener("blur", () => finish(true));
+}
+
+function renderChanges() {
+  const box = $("#x-changes"), ch = explorer.dataset ? pending() : null;
+  const count = ch ? ch.edits.size + ch.deletes.size : 0;
+  box.hidden = !count;
+  if (!count) return;
+  const d = state.datasetsById.get(explorer.dataset), canRule = (e) => (rulesState.overview?.columns[e.entity] ?? []).includes(e.column);
+  box.innerHTML = `<div class="changes-head"><b>${count} unsaved change${count === 1 ? "" : "s"}</b>
+      <button type="button" class="btn small link" data-xreview>${explorer.review ? "Hide list" : "Review"}</button>
+      <button type="button" class="btn small" data-xdiscard>Discard</button>
+      <button type="button" class="btn small primary" data-xsave>Save as v${nextVersion(d)}</button></div>
+    ${explorer.review || count <= 4 ? `<ul class="change-list">${[...ch.edits.entries()].map(([key, e]) => `<li><span class="what">${esc(e.entity.replace("_", " "))} · row ${fmtN(e.row)} · <code>${esc(e.column)}</code>: <s>${esc(e.old ?? "empty")}</s> → <b>${esc(e.value ?? "empty")}</b></span>
+        ${canRule(e) ? `<button type="button" class="btn small link" data-xrule="${esc(key)}" title="New runs will make this change in every dataset">Make it a rule</button>` : ""}
+        <button type="button" class="ibtn" data-xundo="${esc(key)}" title="Undo" aria-label="Undo">${icon("x")}</button></li>`).join("")}
+      ${[...ch.deletes.entries()].map(([key, r]) => `<li><span class="what">${esc(r.entity.replace("_", " "))} · row ${fmtN(r.row)} removed</span>
+        <button type="button" class="ibtn" data-xundel="${esc(key)}" title="Keep this row" aria-label="Keep this row">${icon("x")}</button></li>`).join("")}</ul>` : ""}`;
+}
+
+async function saveEdits() {
+  const ch = pending(), id = explorer.dataset;
+  const body = {
+    edits: [...ch.edits.values()].map(({ entity, row, column, value }) => ({ entity, row, column, value })),
+    deleted_rows: [...ch.deletes.values()],
+  };
+  try {
+    const d = await post(`/api/datasets/${enc(id)}/edits`, body);
+    explorer.changes.delete(id);
+    toast(`Saving as v${d.version}. The original stays as it is.`);
+    await refresh();
+    renderTable();
+  } catch (err) { toast(err.message, true); }
+}
+
+async function ruleFromEdit(key) {
+  const e = pending().edits.get(key);
+  if (!e) return;
+  if (rulesState.dirty) return toast("Save or discard your changes on the Rules tab first.", true);
+  await loadRules();
+  const cur = rulesState.overview.current;
+  const rule = { entity: e.entity, column: e.column, match: (e.old ?? "").trim(), replace: e.value, note: `from an edit in ${datasetTitle(explorer.dataset)}`, enabled: true };
+  if (cur.corrections.some((r) => r.entity === rule.entity && r.column === rule.column && r.match.trim() === rule.match)) {
+    return toast(`There is already a rule for ${rule.column} = "${rule.match || "empty"}".`, true);
+  }
+  try {
+    const saved = await put("/api/rules", { corrections: [...cur.corrections, rule], disabled_rules: cur.disabled_rules, note: `${rule.column}: ${rule.match || "empty"} → ${rule.replace ?? "empty"}` });
+    toast(`Saved as rules version ${saved.version}. New runs will change ${rule.column} "${rule.match || "empty"}" to "${rule.replace ?? "empty"}" everywhere.`);
+    await loadRules();
+  } catch (err) { toast(err.message, true); }
+}
+
+/* output documents */
+const OUTPUT_COLUMNS = {
+  trades: [["trade_id", (d) => d.trade_id], ["event", (d) => d.event_type], ["trade date", (d) => d.trade_date], ["side", (d) => d.side],
+    ["quantity", (d) => d.economics?.quantity], ["price", (d) => d.economics?.price], ["currency", (d) => d.economics?.currency],
+    ["notional USD", (d) => d.economics?.notional_usd], ["counterparty", (d) => d.counterparty?.counterparty_id],
+    ["parent", (d) => d.counterparty?.ultimate_parent?.counterparty_id], ["book", (d) => d.book?.book_id],
+    ["version", (d) => d.lineage?.version], ["latest", (d) => d.lineage?.is_latest], ["warnings", (d) => d.data_quality?.warnings?.join(", ")]],
+  rejects: [["trade_id", (d) => d.trade_id], ["errors", (d) => d.errors?.join(", ")], ["warnings", (d) => d.warnings?.join(", ")],
+    ["side", (d) => d.record?.side], ["quantity", (d) => d.record?.quantity], ["price", (d) => d.record?.price], ["currency", (d) => d.record?.currency],
+    ["trade date", (d) => d.record?.trade_date], ["settles", (d) => d.record?.settlement_date]],
+  exposures: [["parent", (d) => d.ultimate_parent_id], ["name", (d) => d.ultimate_parent_name], ["trades", (d) => d.trade_count],
+    ["gross USD", (d) => d.gross_notional_usd], ["net USD", (d) => d.net_notional_usd], ["currencies", (d) => d.by_currency?.length],
+    ["counterparties", (d) => d.by_counterparty?.length]],
+};
+const showValue = (v) => v == null || v === "" ? `<span class="null">empty</span>` : typeof v === "number" ? esc(v.toLocaleString("en-US")) : esc(String(v));
+
+async function loadOutput() {
+  renderExplorerPickers();
+  if (!explorer.run) {
+    $("#o-grid").innerHTML = `<div class="empty"><b>No output files to show</b><span>Start a run, or a benchmark with "Keep output files" ticked.</span><button type="button" class="btn small primary" data-open="run">New run</button></div>`;
+    $("#o-pager").innerHTML = ""; return;
+  }
+  const params = new URLSearchParams({ offset: explorer.ooffset, limit: XPAGE });
+  if (explorer.oq) params.set("q", explorer.oq);
+  try { explorer.opage = await api(`/api/runs/${enc(explorer.run)}/outputs/${explorer.output}/page?${params}`); }
+  catch (err) { $("#o-grid").innerHTML = `<div class="empty"><b>Can't show this file</b><span>${esc(err.message)}</span></div>`; $("#o-pager").innerHTML = ""; return; }
+  renderOutput();
+}
+function renderOutput() {
+  const p = explorer.opage, cols = OUTPUT_COLUMNS[explorer.output];
+  $("#o-grid").innerHTML = p.documents.length ? `<table class="grid"><thead><tr><th class="rn">#</th>${cols.map(([name]) => `<th>${esc(name)}</th>`).join("")}</tr></thead><tbody>
+    ${p.documents.map((doc, i) => {
+      const n = p.offset + i + 1, open = explorer.open.has(n);
+      return `<tr class="docrow${open ? " open" : ""}" data-doc="${n}" tabindex="0" aria-expanded="${open}"><td class="rn">${fmtN(n)}</td>${cols.map(([name, get]) => `<td${name === "errors" ? ` class="errs"` : ""}>${showValue(get(doc))}</td>`).join("")}</tr>
+        ${open ? `<tr class="docjson"><td colspan="${cols.length + 1}"><pre>${esc(JSON.stringify(doc, null, 2))}</pre></td></tr>` : ""}`;
+    }).join("")}</tbody></table>` : `<div class="empty"><b>No documents match</b><span>Try another value.</span></div>`;
+  const end = Math.min(p.offset + p.documents.length, p.total);
+  $("#o-pager").innerHTML = `<span>${p.total ? `${fmtN(p.offset + 1)}–${fmtN(end)} of ${fmtN(p.total)} documents` : "0 documents"}${explorer.oq ? " matching" : ""} · click a row for the full document</span>
+    <div><button type="button" class="btn small" data-opage="-1"${p.offset === 0 ? " disabled" : ""}>Previous</button><button type="button" class="btn small" data-opage="1"${end >= p.total ? " disabled" : ""}>Next</button></div>`;
+}
+
+function setMode(mode) {
+  explorer.mode = mode;
+  document.querySelectorAll("[data-xmode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.xmode === mode)));
+  $("#data-input").hidden = mode !== "input";
+  $("#data-output").hidden = mode !== "output";
+  return mode === "input" ? loadTable() : loadOutput();
+}
+document.querySelectorAll("[data-xmode]").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.xmode)));
+$("#x-dataset").addEventListener("change", (e) => { explorer.dataset = e.target.value; explorer.offset = 0; explorer.q = ""; $("#x-search").value = ""; loadTable(); });
+$("#x-tables").addEventListener("change", (e) => { explorer.entity = e.target.value; explorer.offset = 0; loadTable(); });
+$("#o-run").addEventListener("change", (e) => { explorer.run = e.target.value; explorer.ooffset = 0; explorer.open.clear(); loadOutput(); });
+$("#o-outputs").addEventListener("change", (e) => { explorer.output = e.target.value; explorer.ooffset = 0; explorer.open.clear(); loadOutput(); });
+let searchTimer = null;
+$("#x-search").addEventListener("input", (e) => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { explorer.q = e.target.value.trim(); explorer.offset = 0; loadTable(); }, 300); });
+$("#o-search").addEventListener("input", (e) => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { explorer.oq = e.target.value.trim(); explorer.ooffset = 0; explorer.open.clear(); loadOutput(); }, 300); });
+$("#x-grid").addEventListener("click", (e) => {
+  const del = e.target.closest("[data-xdel]");
+  if (del) {
+    const key = `${explorer.entity}|${del.dataset.xdel}`, ch = pending();
+    if (ch.deletes.has(key)) ch.deletes.delete(key); else ch.deletes.set(key, { entity: explorer.entity, row: Number(del.dataset.xdel) });
+    return renderTable();
+  }
+  const td = e.target.closest("td.cell");
+  if (td && !td.closest("tr.deleted")) startEdit(td);
+});
+$("#x-pager").addEventListener("click", (e) => { const b = e.target.closest("[data-xpage]"); if (b) { explorer.offset = Math.max(0, explorer.offset + Number(b.dataset.xpage) * XPAGE); loadTable(); } });
+$("#o-pager").addEventListener("click", (e) => { const b = e.target.closest("[data-opage]"); if (b) { explorer.ooffset = Math.max(0, explorer.ooffset + Number(b.dataset.opage) * XPAGE); explorer.open.clear(); loadOutput(); } });
+const toggleDoc = (row) => { const n = Number(row.dataset.doc); if (explorer.open.has(n)) explorer.open.delete(n); else explorer.open.add(n); renderOutput(); };
+$("#o-grid").addEventListener("click", (e) => { const row = e.target.closest("tr.docrow"); if (row) toggleDoc(row); });
+$("#o-grid").addEventListener("keydown", (e) => { const row = e.target.closest("tr.docrow"); if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleDoc(row); } });
+$("#x-changes").addEventListener("click", async (e) => {
+  const t = e.target.closest("button");
+  if (!t) return;
+  const ch = pending();
+  if (t.dataset.xreview !== undefined) { explorer.review = !explorer.review; return renderChanges(); }
+  if (t.dataset.xdiscard !== undefined) {
+    if (!(await confirmDelete("Discard your changes?", "The values go back to what the file holds, and no new version is made."))) return;
+    explorer.changes.delete(explorer.dataset); return renderTable();
+  }
+  if (t.dataset.xsave !== undefined) return saveEdits();
+  if (t.dataset.xrule) return ruleFromEdit(t.dataset.xrule);
+  if (t.dataset.xundo) { ch.edits.delete(t.dataset.xundo); return renderTable(); }
+  if (t.dataset.xundel) { ch.deletes.delete(t.dataset.xundel); return renderTable(); }
+});
+function openData(mode, id) {
+  if (mode === "input") { explorer.dataset = id; explorer.offset = 0; explorer.q = ""; $("#x-search").value = ""; }
+  else { explorer.run = id; explorer.ooffset = 0; explorer.oq = ""; $("#o-search").value = ""; explorer.open.clear(); }
+  explorer.mode = mode;
+  if (location.hash === "#data") setMode(mode); else location.hash = "data";
+}
+
+/* ---------- rules ---------- */
+const rulesState = { overview: null, history: [], draft: null, dirty: false };
+async function loadRules() {
+  try {
+    const [overview, history] = await Promise.all([api("/api/rules"), api("/api/rules/history")]);
+    Object.assign(rulesState, { overview, history });
+    if (!rulesState.dirty) rulesState.draft = structuredClone({ corrections: overview.current.corrections, disabled_rules: overview.current.disabled_rules });
+    renderRules();
+  } catch (err) { console.error("rules failed", err); }
+}
+function markDirty() { rulesState.dirty = true; renderSaveBar(); }
+function renderSaveBar() {
+  const cur = rulesState.overview?.current;
+  $("#rules-save").hidden = !rulesState.dirty;
+  $("#rules-commit").textContent = `Save as version ${(cur?.version ?? 0) + 1}`;
+}
+function correctionRow(rule, i) {
+  const columns = rulesState.overview.columns[rule.entity] ?? [];
+  return `<tr data-rule="${i}">
+    <td><select data-f="entity" aria-label="Table">${ENTITIES.map((e) => `<option value="${e}"${e === rule.entity ? " selected" : ""}>${e.replace("_", " ")}</option>`).join("")}</select></td>
+    <td><select data-f="column" aria-label="Column">${columns.map((c) => `<option${c === rule.column ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></td>
+    <td><input type="text" data-f="match" value="${esc(rule.match)}" placeholder="empty value" aria-label="When the value is"></td>
+    <td class="arrow">→</td>
+    <td><input type="text" data-f="replace" value="${esc(rule.replace ?? "")}" placeholder="empty it" aria-label="Change it to"></td>
+    <td><input type="text" data-f="note" value="${esc(rule.note)}" placeholder="why" aria-label="Note"></td>
+    <td><input type="checkbox" class="switch" data-f="enabled"${rule.enabled ? " checked" : ""} aria-label="Rule on"></td>
+    <td class="acts"><button type="button" class="ibtn del" data-delrule="${i}" title="Delete rule" aria-label="Delete rule">${icon("trash")}</button></td></tr>`;
+}
+function renderRules() {
+  const { overview, draft, history } = rulesState;
+  if (!overview) return;
+  const cur = overview.current;
+  $("#rules-version").textContent = cur.version ? `version ${cur.version} · saved ${ago(cur.created_at)}` : "version 0 · no changes yet";
+  $("#count-rules").textContent = cur.version ? `v${cur.version}` : "";
+  $("#corrections").innerHTML = draft.corrections.length ? `<table class="rules-table">
+    <thead><tr><th>Table</th><th>Column</th><th>When the value is</th><th></th><th>Change it to</th><th>Note</th><th>On</th><th></th></tr></thead>
+    <tbody>${draft.corrections.map(correctionRow).join("")}</tbody></table>`
+    : `<div class="empty"><b>No correction rules yet</b><span>Add one here, or press "Make it a rule" on an edit in the Data tab.</span></div>`;
+  const off = new Set(draft.disabled_rules);
+  $("#rules-off").textContent = off.size ? `${off.size} switched off` : "all on";
+  $("#rulelist").innerHTML = overview.codes.map((c) => `<li>
+    <input type="checkbox" class="switch" data-code="${esc(c.code)}"${off.has(c.code) ? "" : " checked"}${c.locked ? " disabled" : ""} aria-label="${esc(c.text)}">
+    <span>${esc(c.text)} <span class="code">${esc(c.code)}</span></span>
+    <span class="why${off.has(c.code) ? " off" : ""}">${c.locked ? `Always on. ${esc(c.reason)}` : off.has(c.code) ? "Off: trades with this problem are kept." : "Can be switched off."}</span></li>`).join("");
+  $("#rules-history").innerHTML = history.length ? `<table><thead><tr><th>Version</th><th>Saved</th><th>Note</th><th>Contents</th></tr></thead><tbody>
+    ${history.map((r) => `<tr><td><b>v${r.version}</b>${r.version === cur.version ? ` <span class="pill tone-good">current</span>` : ""}</td><td class="muted">${esc(ago(r.created_at))}</td><td>${esc(r.note || "–")}</td>
+      <td class="muted">${r.corrections.length} correction${r.corrections.length === 1 ? "" : "s"} · ${r.disabled_rules.length} switched off</td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty"><span>Nothing saved yet. Every run so far used the default rules (version 0).</span></div>`;
+  renderSaveBar();
+}
+$("#add-rule").addEventListener("click", () => {
+  rulesState.draft.corrections.push({ entity: "trades", column: "currency", match: "", replace: "", note: "", enabled: true });
+  markDirty(); renderRules();
+  $("#corrections tbody tr:last-child input[data-f=match]")?.focus();
+});
+$("#corrections").addEventListener("input", (e) => {
+  const tr = e.target.closest("tr[data-rule]"), field = e.target.dataset.f;
+  if (!tr || !field) return;
+  const rule = rulesState.draft.corrections[Number(tr.dataset.rule)];
+  if (field === "enabled") rule.enabled = e.target.checked;
+  else if (field === "replace") rule.replace = e.target.value === "" ? null : e.target.value;
+  else rule[field] = e.target.value;
+  if (field === "entity") { rule.column = rulesState.overview.columns[rule.entity][0]; renderRules(); }
+  markDirty();
+});
+$("#corrections").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-delrule]");
+  if (!b) return;
+  rulesState.draft.corrections.splice(Number(b.dataset.delrule), 1);
+  markDirty(); renderRules();
+});
+$("#rulelist").addEventListener("change", (e) => {
+  const code = e.target.dataset.code;
+  if (!code) return;
+  const off = new Set(rulesState.draft.disabled_rules);
+  if (e.target.checked) off.delete(code); else off.add(code);
+  rulesState.draft.disabled_rules = [...off];
+  markDirty(); renderRules();
+});
+$("#rules-discard").addEventListener("click", () => { rulesState.dirty = false; $("#rules-note").value = ""; loadRules(); });
+$("#rules-commit").addEventListener("click", async () => {
+  const button = $("#rules-commit");
+  button.disabled = true;
+  try {
+    const saved = await put("/api/rules", { ...rulesState.draft, note: $("#rules-note").value.trim() });
+    rulesState.dirty = false;
+    $("#rules-note").value = "";
+    toast(`Saved as rules version ${saved.version}. Runs started from now on use it.`);
+    await loadRules();
+  } catch (err) { toast(err.message, true); }
+  finally { button.disabled = false; }
+});
+
+/* ---------- tabs ---------- */
+const VIEWS = ["overview", "datasets", "data", "runs", "benchmarks", "rules", "activity"];
+function show() {
+  const view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
+  document.querySelectorAll("[data-view]").forEach((s) => { s.hidden = s.dataset.view !== view; });
+  document.querySelectorAll("[data-tab]").forEach((a) => { if (a.dataset.tab === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+  window.scrollTo(0, 0);
+  if (view === "data") setMode(explorer.mode);
+  if (view === "rules") loadRules();
+}
+window.addEventListener("hashchange", show);
+setInterval(() => { if (!document.hidden) renderOverview(); }, 60000);
+show();
 connect();
 refresh();
+loadRules();
 </script>
 </body>
 </html>

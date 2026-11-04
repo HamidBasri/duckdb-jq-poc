@@ -56,7 +56,8 @@ class DuckDbEngine:
         raw_rows: dict[str, int] = {}
         for entity in Entity:
             source = ctx.dataset.source_path(ctx.dataset_dir, entity, ctx.source_format)
-            self._con.execute(f"CREATE OR REPLACE TABLE raw_{entity} AS {source_select_sql(entity, source)}")
+            select = source_select_sql(entity, source, ctx.rules.corrections_for(entity))
+            self._con.execute(f"CREATE OR REPLACE TABLE raw_{entity} AS {select}")
             raw_rows[entity] = self._scalar(f"SELECT count(*) FROM raw_{entity}")
         return StageResult(rows_out=raw_rows[Entity.TRADES], detail={"raw_rows": raw_rows})
 
@@ -71,6 +72,10 @@ class DuckDbEngine:
         )
 
     def _validate(self, ctx: RunContext) -> StageResult:
+        self._con.execute(
+            "CREATE OR REPLACE TABLE run_rules AS SELECT $disabled::VARCHAR[] AS disabled_rules",
+            {"disabled": ctx.rules.disabled_rules},
+        )
         self._run_script("validate")
         rejects = ctx.output_path(OutputName.REJECTS)
         self._copy_to_ndjson("SELECT * FROM rejected_trades", rejects)

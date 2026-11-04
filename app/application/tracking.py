@@ -10,6 +10,7 @@ from app.application.projections import Repositories
 from app.application.services import NotFoundError
 from app.domain.models import (
     PIPELINE_STAGES,
+    CorrectionRule,
     Entity,
     OutputName,
     PipelineRun,
@@ -139,6 +140,10 @@ def build_timeline(run: PipelineRun, row: RowStatus, source_file: str) -> list[T
     return steps
 
 
+def _trade_rules(run: PipelineRun) -> list[CorrectionRule]:
+    return run.rules.corrections_for(Entity.TRADES) if run.rules else []
+
+
 class RowTrackingService:
     def __init__(self, repositories: Repositories, reader: RowStatusReader, datasets_dir: Path) -> None:
         self._repos = repositories
@@ -188,7 +193,7 @@ class RowTrackingService:
             total, rows = self._reader.find(path, state, search, limit, offset)
             return RowPage(total=total, offset=offset, limit=limit, rows=rows)
         if files := self._rejects_so_far(run):
-            total, rows = self._reader.find_rejects(*files, state, search, limit, offset)
+            total, rows = self._reader.find_rejects(*files, _trade_rules(run), state, search, limit, offset)
             return RowPage(total=total, offset=offset, limit=limit, rows=rows, complete=False)
         raise self._no_rows(run_id)
 
@@ -198,7 +203,7 @@ class RowTrackingService:
         if path := self._status_path(run):
             row = self._reader.get(path, source_row)
         elif files := self._rejects_so_far(run):
-            row, complete = self._reader.get_reject(*files, source_row), False
+            row, complete = self._reader.get_reject(*files, _trade_rules(run), source_row), False
         else:
             raise self._no_rows(run_id)
         if row is None:

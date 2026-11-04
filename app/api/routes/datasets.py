@@ -2,11 +2,13 @@
 
 from typing import Annotated, BinaryIO
 
-from fastapi import APIRouter, File, UploadFile, status
+from fastapi import APIRouter, File, Query, UploadFile, status
 
 from app.api.deps import ContainerDep
-from app.api.schemas import DatasetProfile, GenerateRequest
-from app.domain.models import DatasetManifest, Entity, GenerationSpec
+from app.api.schemas import DatasetProfile, EditRequest, GenerateRequest, VersionRequest
+from app.domain.models import DatasetManifest, Entity, EntityColumns, GenerationSpec, TablePage
+
+MAX_PAGE_ROWS = 500
 
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 
@@ -19,6 +21,45 @@ async def list_datasets(container: ContainerDep) -> list[DatasetManifest]:
 @router.get("/{dataset_id}")
 async def get_dataset(dataset_id: str, container: ContainerDep) -> DatasetManifest:
     return container.datasets.get(dataset_id)
+
+
+@router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_dataset(dataset_id: str, container: ContainerDep) -> None:
+    """Remove a dataset and its files (refused while a run is using it)."""
+    await container.datasets.delete(dataset_id)
+
+
+@router.get("/{dataset_id}/columns")
+async def dataset_columns(dataset_id: str, container: ContainerDep) -> list[EntityColumns]:
+    """Each file's columns next to the expected ones, with suggested matches and sample values."""
+    return await container.datasets.columns(dataset_id)
+
+
+@router.post("/{dataset_id}/versions", status_code=status.HTTP_202_ACCEPTED)
+async def create_version(
+    dataset_id: str, request: VersionRequest, container: ContainerDep
+) -> DatasetManifest:
+    """Copy the dataset with its columns renamed to the expected ones. The original is kept."""
+    return await container.datasets.request_version(dataset_id, request.mapping)
+
+
+@router.get("/{dataset_id}/tables/{entity}")
+async def dataset_table(
+    dataset_id: str,
+    entity: Entity,
+    container: ContainerDep,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=MAX_PAGE_ROWS),
+    q: str | None = Query(None, description="Row number, or text found in any field"),
+) -> TablePage:
+    """A page of one input table, every value as text, exactly as the file holds it."""
+    return await container.explorer.table(dataset_id, entity, offset, limit, q)
+
+
+@router.post("/{dataset_id}/edits", status_code=status.HTTP_202_ACCEPTED)
+async def edit_dataset(dataset_id: str, request: EditRequest, container: ContainerDep) -> DatasetManifest:
+    """Save fields changed and rows removed by hand as a new version. The original is kept."""
+    return await container.datasets.request_edits(dataset_id, request.edits, request.deleted_rows)
 
 
 @router.post("/generate", status_code=status.HTTP_202_ACCEPTED)

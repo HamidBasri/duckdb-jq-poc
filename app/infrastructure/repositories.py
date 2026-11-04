@@ -29,11 +29,18 @@ class JsonFileRepository[ModelT: BaseModel]:
     def list(self) -> list[ModelT]:
         return list(self._records.values())
 
+    def _path(self, key: str) -> Path:
+        return self._root / key / self._filename if self._filename else self._root / f"{key}.json"
+
     def save(self, record: ModelT) -> None:
         key = self._key(record)
         self._records[key] = record
-        path = self._root / key / self._filename if self._filename else self._root / f"{key}.json"
+        path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")
         temporary.write_text(record.model_dump_json(indent=2))
         os.replace(temporary, path)  # atomic: readers never see a half-written file
+
+    def delete(self, key: str) -> None:
+        self._records.pop(key, None)
+        self._path(key).unlink(missing_ok=True)

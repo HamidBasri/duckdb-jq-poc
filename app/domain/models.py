@@ -130,9 +130,52 @@ class GeneratedDataset(BaseModel):
     seconds: float
 
 
+# Per entity: expected column -> column in the source file, or None to leave it empty.
+ColumnMapping = dict[Entity, dict[str, str | None]]
+
+
+class CellEdit(BaseModel):
+    """One field changed by hand in a dataset version."""
+
+    entity: Entity
+    row: int = Field(ge=1, description="1-based row in the source file")
+    column: str
+    value: str | None = Field(description="New text; None empties the field")
+
+
+class RowRef(BaseModel):
+    entity: Entity
+    row: int = Field(ge=1)
+
+
+class CorrectionRule(BaseModel):
+    """'When this column holds this value, use that one instead', applied while the data is read."""
+
+    entity: Entity
+    column: str
+    match: str = Field(description="Compared after trimming spaces; an empty string matches a missing value")
+    replace: str | None = Field(description="Value to use instead; None empties the field")
+    note: str = ""
+    enabled: bool = True
+
+
+class RuleSet(BaseModel):
+    """Correction rules and validation switches. Every change saves a new version; runs keep the one
+    they used, so results can always be explained."""
+
+    version: int = 0
+    corrections: list[CorrectionRule] = Field(default_factory=list)
+    disabled_rules: list[str] = Field(default_factory=list, description="Error codes that no longer reject")
+    note: str = ""
+    created_at: datetime = Field(default_factory=utc_now)
+
+    def corrections_for(self, entity: Entity) -> list[CorrectionRule]:
+        return [rule for rule in self.corrections if rule.enabled and rule.entity is entity]
+
+
 class DatasetManifest(BaseModel):
     dataset_id: str
-    origin: str  # "generated" | "uploaded"
+    origin: str  # "generated" | "uploaded" | "version"
     status: DatasetStatus = DatasetStatus.PENDING
     created_at: datetime = Field(default_factory=utc_now)
     generation: GenerationSpec | None = None
@@ -141,6 +184,13 @@ class DatasetManifest(BaseModel):
     size_bytes: dict[SourceFormat, int] = Field(default_factory=dict)
     generation_seconds: float | None = None
     error: str | None = None
+    # Versions: a copy of another dataset with its columns renamed to the contract.
+    version: int = 1
+    parent_id: str | None = None
+    root_id: str | None = None
+    column_mapping: ColumnMapping | None = None
+    edits: list[CellEdit] = Field(default_factory=list)
+    deleted_rows: list[RowRef] = Field(default_factory=list)
 
     def source_path(
         self, root: Path, entity: Entity, preferred: SourceFormat
@@ -151,6 +201,36 @@ class DatasetManifest(BaseModel):
             if fmt in available:
                 return root / available[fmt], fmt
         return None
+
+
+class EntityColumns(BaseModel):
+    """One source file's columns next to the columns the pipeline expects."""
+
+    entity: Entity
+    file: str
+    found: list[str]
+    expected: list[str]
+    missing: list[str]
+    suggested: dict[str, str | None]
+    samples: dict[str, list[str | None]]
+
+
+class TablePage(BaseModel):
+    """A page of rows from a source file, every value as text."""
+
+    columns: list[str]
+    rows: list[list[str | None]]
+    row_numbers: list[int]
+    total: int
+    offset: int
+
+
+class DocumentPage(BaseModel):
+    """A page of documents from an NDJSON output file."""
+
+    documents: list[dict[str, Any]]
+    total: int
+    offset: int
 
 
 class TransformParams(BaseModel):
@@ -242,6 +322,7 @@ class PipelineRun(BaseModel):
     quality: dict[str, Any] | None = None
     tracking: RowTrackingSummary | None = None
     error: str | None = None
+    rules: RuleSet | None = None
 
     @property
     def total_seconds(self) -> float:
@@ -293,6 +374,7 @@ class Comparison(BaseModel):
     verify: bool = True
     parallel_engines: bool = False
     benchmark_id: str | None = None
+    rules_version: int = 0
     status: ComparisonStatus = ComparisonStatus.QUEUED
     created_at: datetime = Field(default_factory=utc_now)
     finished_at: datetime | None = None
