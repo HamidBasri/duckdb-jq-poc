@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mapping Guide: Engines</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="guide.css">
+<style>
+.bar { display: grid; gap: 3px; min-width: 11rem; }
+.bar span { display: block; height: 8px; border-radius: 4px; }
+.bar .d { background: var(--duck); } .bar .j { background: var(--jq); }
+</style>
+
+<header class="hero">
+  <div class="wrap">
+    <a class="guide" href="index.html">duckdb-jq-poc · Table Mapping Guide</a>
+    <h1>Step 5 · Two engines, and which is better</h1>
+    <p>Who runs the seven kinds of mapping, and which one runs each kind better.</p>
+    <ol class="ladder">
+      <li><a href="index.html" class="done">Start</a></li>
+      <li><a href="tables.html" class="done">Tables</a></li>
+      <li><a href="output.html" class="done">Output</a></li>
+      <li><a href="mappings.html" class="done">Mappings</a></li>
+      <li><a href="problems.html" class="done">Problems</a></li>
+      <li><a href="engines.html" aria-current="page">Engines</a></li>
+    </ol>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section>
+  <h2>The last two words</h2>
+  <dl class="define">
+    <dt>Engine</dt><dd>The program that runs every mapping. This project has two, and each runs the whole pipeline on its own: <b>DuckDB</b>, a database that runs inside the app and speaks SQL, and <b>jq</b>, a command-line tool for JSON.</dd>
+    <dt>Verdict</dt><dd>For one kind of mapping, which engine runs it better, and why.</dd>
+  </dl>
+  <div class="example"><span class="label">Our trade · in both engines</span>
+    <p>Both engines turn our trade into exactly the document from step 2, field for field. After every run a checker compares the two outputs document by document, and every run so far has matched. So a verdict is never about <i>what</i> comes out, only about <i>how</i> each engine gets there.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Two ways of working</h2>
+  <figure>
+    <div class="pad"><svg class="dg" viewBox="0 0 960 270" style="min-width:760px" role="img" aria-label="Left, DuckDB: the whole table is in memory and every core works on whole columns at once. Right, jq: records pass one at a time through a single jq process, which first loads the lookup tables it needs.">
+      <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+      <!-- DuckDB -->
+      <text class="t" x="20" y="30" style="fill:var(--duck)">DuckDB · whole columns at once</text>
+      <g>
+        <rect class="soft" x="20" y="70" width="270" height="170" rx="6"/>
+        <rect class="duck" x="110" y="70" width="45" height="170"/>
+        <path class="edge" d="M65 70V240M110 70V240M155 70V240M200 70V240M245 70V240" style="stroke:var(--line)"/>
+        <path class="edge" d="M20 98H290M20 126H290M20 154H290M20 182H290M20 210H290" style="stroke:var(--line)"/>
+        <path class="edge" d="M118 44V66M127 44V66M137 44V66M146 44V66" style="stroke:var(--duck)" marker-end="url(#a)"/>
+        <text class="s" x="162" y="56">every core</text>
+      </g>
+      <text x="310" y="96">The whole table</text><text x="310" y="114">is in memory.</text>
+      <text x="310" y="146">Joins, grouping and</text><text x="310" y="164">sorting are built in.</text>
+      <text x="310" y="196">One SQL step</text><text x="310" y="214">per stage.</text>
+      <!-- jq -->
+      <text class="t" x="500" y="30" style="fill:var(--jq)">jq · one record at a time</text>
+      <rect class="file" x="680" y="50" width="130" height="42" rx="6"/><text class="s mid" x="745" y="68">lookup tables,</text><text class="s mid" x="745" y="84">loaded first</text>
+      <g><rect class="soft" x="500" y="132" width="30" height="30" rx="4"/><rect class="soft" x="536" y="132" width="30" height="30" rx="4"/><rect class="soft" x="572" y="132" width="30" height="30" rx="4"/><rect class="soft" x="608" y="132" width="30" height="30" rx="4"/></g>
+      <rect class="jq" x="680" y="120" width="130" height="54" rx="8"/><text class="t mid" x="745" y="146">jq</text><text class="s mid" x="745" y="164">one core</text>
+      <g><rect class="soft" x="850" y="132" width="30" height="30" rx="4"/><rect class="soft" x="886" y="132" width="30" height="30" rx="4"/></g>
+      <path class="edge" d="M642 147H678" marker-end="url(#a)"/><path class="edge" d="M810 147H846" marker-end="url(#a)"/>
+      <path class="edge" d="M745 92V118" marker-end="url(#a)"/>
+      <text x="500" y="206">Reads a record, writes a record. It can't look</text>
+      <text x="500" y="224">ahead, so a pass that needs the whole table is</text>
+      <text x="500" y="242">split in two. 13 passes in all, JSON text between.</text>
+    </svg></div>
+    <figcaption><b>Almost every verdict follows from this picture.</b> DuckDB has the whole table and every core; jq has one record, one core, and whatever it loaded beforehand.</figcaption>
+  </figure>
+
+  <h3>What that means in practice</h3>
+  <div class="grid">
+    <div class="card duck"><h4>Speed</h4><p>DuckDB is faster at every stage. At 1 million trades it took 11 s against jq's 5 min 14 s. Even limited to one core, DuckDB took 15.6 s.</p></div>
+    <div class="card duck"><h4>Seeing ahead</h4><p>DuckDB sees the whole table, so <span class="kind"><b>4</b>Look up</span> and <span class="kind"><b>5</b>Walk</span> work in any file order in one step. jq needs extra passes for the same thing.</p></div>
+    <div class="card jq"><h4>Memory</h4><p>jq only keeps what each pass needs: 632 MB at 1 million trades. DuckDB used 2.6 GB by default, or 1.4 GB once tuned.</p></div>
+    <div class="card jq"><h4>Nested JSON</h4><p>JSON is jq's native shape, so <span class="kind"><b>5</b>Walk</span> on company trees and <span class="kind"><b>7</b>Nest</span> read naturally. A SQL row can't contain itself, so DuckDB builds nested parents as JSON text.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>The verdict for each kind of mapping</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Kind</th><th>DuckDB</th><th>jq</th><th>Verdict and why</th></tr></thead>
+    <tbody>
+      <tr><td class="nw">Read <span class="muted">(before mapping)</span></td><td>Reads CSV and Parquet directly.</td><td>Can't read them. DuckDB writes a JSON copy of every table for it.</td><td><span class="v duck">DuckDB</span> jq can't do it at all. Ingest: 0.56 s against 4.8 s.</td></tr>
+      <tr><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td>Small SQL functions over whole columns.</td><td>The same rules as jq functions, one record at a time.</td><td><span class="v duck">DuckDB</span> Same rules, faster.</td></tr>
+      <tr><td class="nw"><span class="kind"><b>2</b>Parse</span></td><td><code>try_strptime</code> is strict: <span class="val">2025-02-30</span> gives empty.</td><td><code>strptime</code> rolls 31 February over to 3 March, so each date is turned back into text and compared with the input.</td><td><span class="v duck">DuckDB</span> Correct by default; jq needs a round trip.</td></tr>
+      <tr><td class="nw"><span class="kind"><b>3</b>Fill</span></td><td>A join to instruments, and real date arithmetic.</td><td>Loads every instrument as a lookup first; adds 2 days as seconds since 1970.</td><td><span class="v duck">DuckDB</span> A join and a date type do it directly.</td></tr>
+      <tr><td class="nw"><span class="kind"><b>4</b>Look up</span></td><td>Joins, including trades with itself, so an earlier version can be anywhere in the file.</td><td>A lookup object per table, in memory. To check earlier versions it reads the trades twice: first to collect every id.</td><td><span class="v duck">DuckDB</span> Joining is what a database is for. Validate: 0.21 s against 60 s.</td></tr>
+      <tr><td class="nw"><span class="kind"><b>5</b>Walk</span></td><td>A recursive query from the top of each chain down. Loops are never reached, so they are spotted.</td><td>Walks up from each row, remembering ids it has seen, so it stops at loops. Version chains need one more pass.</td><td><span class="v split">Split</span> jq reads more naturally for trees; DuckDB is faster: 200-level trees 1.6 s against 12 s, 100-version chains 1.1 s against 11 s (50k trades, transform).</td></tr>
+      <tr><td class="nw"><span class="kind"><b>6</b>Calculate</span></td><td>Arithmetic on columns; <code>GROUP BY</code> for the totals.</td><td>The same arithmetic per record; one <code>reduce</code> over every document for the totals.</td><td><span class="v duck">DuckDB</span> Grouping is a database's home ground. Aggregate: 0.66 s against 48 s.</td></tr>
+      <tr><td class="nw"><span class="kind"><b>7</b>Nest</span></td><td>Builds each part as a SQL struct, then writes the table out as JSON.</td><td>Writes the JSON object directly.</td><td><span class="v split">Split</span> jq's native shape and its closest stage; DuckDB is still faster.</td></tr>
+      <tr><td class="nw">Drop repeats <span class="muted">(keys)</span></td><td>Keeps the first row per key with a window function.</td><td>Streams through, remembering only the keys seen.</td><td><span class="v duck">DuckDB</span> Faster, though jq's way uses less memory.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">Seven to DuckDB, two split, none to jq. Times are from the 1 million trade benchmark unless marked.</p>
+</section>
+
+<section>
+  <h2>Where the time goes</h2>
+  <p>The same five stages as step 3, with the kinds each one runs, timed at 1 million trades.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Stage</th><th>Kinds it runs</th><th class="num">DuckDB</th><th class="num">jq</th><th class="num">jq takes</th><th>Bars, same scale</th></tr></thead>
+    <tbody>
+      <tr><td>ingest</td><td class="nw">Read</td><td class="num">0.56 s</td><td class="num">4.8 s</td><td class="num">9×</td><td><div class="bar"><span class="d" style="width:0.5%"></span><span class="j" style="width:4.3%"></span></div></td></tr>
+      <tr><td>clean</td><td class="nw"><span class="kind"><b>1</b>Clean</span> <span class="kind"><b>2</b>Parse</span> <span class="kind"><b>3</b>Fill</span></td><td class="num">0.60 s</td><td class="num">1 min 31 s</td><td class="num">152×</td><td><div class="bar"><span class="d" style="width:0.5%"></span><span class="j" style="width:81.8%"></span></div></td></tr>
+      <tr><td>validate</td><td class="nw"><span class="kind"><b>4</b>Look up</span></td><td class="num">0.21 s</td><td class="num">60 s</td><td class="num">289×</td><td><div class="bar"><span class="d" style="width:0.2%"></span><span class="j" style="width:53.7%"></span></div></td></tr>
+      <tr><td>transform</td><td class="nw"><span class="kind"><b>4</b></span> <span class="kind"><b>5</b></span> <span class="kind"><b>6</b></span> <span class="kind"><b>7</b></span></td><td class="num">8.9 s</td><td class="num">1 min 51 s</td><td class="num">12×</td><td><div class="bar"><span class="d" style="width:8%"></span><span class="j" style="width:100%"></span></div></td></tr>
+      <tr><td>aggregate</td><td class="nw"><span class="kind"><b>6</b>Calculate</span></td><td class="num">0.66 s</td><td class="num">48 s</td><td class="num">72×</td><td><div class="bar"><span class="d" style="width:0.6%"></span><span class="j" style="width:42.8%"></span></div></td></tr>
+      <tr><td><b>total</b></td><td></td><td class="num"><b>11 s</b></td><td class="num"><b>5 min 14 s</b></td><td class="num"><b>29×</b></td><td></td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">Transform is the closest stage: it is where Walk and Nest happen, the two splits above. Apple Silicon laptop, 10 cores, 16 GB, Parquet input, one run per size; full numbers in the <a href="../benchmark-report.html">report</a>.</p>
+</section>
+
+<section class="recap">
+  <h3>The whole guide in five lines</h3>
+  <ul>
+    <li><b>1 · Tables:</b> five tables come in, linked by keys; only trades becomes documents.</li>
+    <li><b>2 · Output:</b> each valid trade becomes one document, with the rows it links to copied inside; bad trades go to rejects; exposures add documents up.</li>
+    <li><b>3 · Mappings:</b> every value travels by one of seven kinds: Clean, Parse, Fill, Look up, Walk, Calculate, Nest.</li>
+    <li><b>4 · Problems:</b> when a value doesn't fit, the trade is Fixed, Filled, Flagged, Dropped or Rejected.</li>
+    <li><b>5 · Engines:</b> both give the same result. DuckDB is better whenever a mapping needs the whole table, which is most of them. jq's strengths are memory and the two kinds where nested JSON is the natural shape.</li>
+  </ul>
+</section>
+
+<nav class="pager" aria-label="Previous page and start">
+  <a href="problems.html"><span>Step 4</span><b>← Problems and outcomes</b></a>
+  <a class="next" href="index.html"><span>Start</span><b>Back to the whole idea →</b></a>
+</nav>
+</main>
+<footer class="wrap">Part of <a href="../index.html">duckdb-jq-poc</a>. Also see the <a href="../blueprint.html">blueprint</a> and the <a href="../benchmark-report.html">benchmark report</a>.</footer>
+</html>

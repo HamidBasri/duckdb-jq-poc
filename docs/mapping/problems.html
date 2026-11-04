@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mapping Guide: Problems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="guide.css">
+
+<header class="hero">
+  <div class="wrap">
+    <a class="guide" href="index.html">duckdb-jq-poc · Table Mapping Guide</a>
+    <h1>Step 4 · Problems and their outcomes</h1>
+    <p>What happens when a value doesn't fit its mapping.</p>
+    <ol class="ladder">
+      <li><a href="index.html" class="done">Start</a></li>
+      <li><a href="tables.html" class="done">Tables</a></li>
+      <li><a href="output.html" class="done">Output</a></li>
+      <li><a href="mappings.html" class="done">Mappings</a></li>
+      <li><a href="problems.html" aria-current="page">Problems</a></li>
+      <li><a href="engines.html">Engines</a></li>
+    </ol>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section>
+  <h2>Two new words</h2>
+  <dl class="define">
+    <dt>Problem</dt><dd>A value that one of the seven mappings can't use as it is: <span class="val">HOLD</span> as a side, <span class="val">N/A</span> as a quantity, a link to a row that doesn't exist.</dd>
+    <dt>Outcome</dt><dd>What then happens to the trade. There are exactly five, from mildest to strongest.</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>The five outcomes</h2>
+  <figure>
+    <div class="pad"><svg class="dg" viewBox="0 0 960 230" style="min-width:760px" role="img" aria-label="Five outcomes from mildest to strongest. Fixed: the trade goes on and nothing is noted. Filled: the trade goes on with a warning. Flagged: the trade goes on with a warning and some fields empty. Dropped: the row is removed before the checks and appears in no file. Rejected: the trade goes to rejects.ndjson with every reason.">
+      <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+      <rect class="o-fixed" x="10" y="20" width="176" height="150" rx="10"/>
+      <text class="t" x="26" y="46" style="fill:var(--fixed)">Fixed</text><text x="26" y="72">The value is tidied.</text><text x="26" y="92">The trade goes on.</text><text class="s" x="26" y="124">ends up in</text><text class="m" x="26" y="144">trades.ndjson</text>
+      <rect class="o-filled" x="202" y="20" width="176" height="150" rx="10"/>
+      <text class="t" x="218" y="46" style="fill:var(--filled)">Filled</text><text x="218" y="72">A gap is filled.</text><text x="218" y="92">Goes on, with a warning.</text><text class="s" x="218" y="124">ends up in</text><text class="m" x="218" y="144">trades.ndjson</text>
+      <rect class="o-flagged" x="394" y="20" width="176" height="150" rx="10"/>
+      <text class="t" x="410" y="46" style="fill:var(--flagged)">Flagged</text><text x="410" y="72">A chain can't finish.</text><text x="410" y="92">Goes on, with a warning;</text><text x="410" y="110">some fields stay empty.</text><text class="s" x="410" y="134">ends up in</text><text class="m" x="410" y="154">trades.ndjson</text>
+      <rect class="o-dropped" x="586" y="20" width="176" height="150" rx="10"/>
+      <text class="t" x="602" y="46" style="fill:var(--dropped)">Dropped</text><text x="602" y="72">The row is a repeat.</text><text x="602" y="92">Removed before checks.</text><text class="s" x="602" y="124">ends up in</text><text x="602" y="144">no file (the tracker</text><text x="602" y="162">shows it as a duplicate)</text>
+      <rect class="o-rejected" x="778" y="20" width="172" height="150" rx="10"/>
+      <text class="t" x="794" y="46" style="fill:var(--rejected)">Rejected</text><text x="794" y="72">A value is unusable.</text><text x="794" y="92">The trade stops.</text><text class="s" x="794" y="124">ends up in</text><text class="m" x="794" y="144">rejects.ndjson</text><text class="s" x="794" y="162">with every reason</text>
+      <path class="edge" d="M20 205H940" marker-end="url(#a)"/><text class="lbl" x="20" y="198">milder</text><text class="lbl" x="880" y="198">stronger</text>
+    </svg></div>
+    <figcaption><b>The first three keep the trade, the last two don't.</b> A warning is a code starting with <code>W_</code>, saved in the document's <span class="fld">data_quality.warnings</span>. A reason for rejecting is a code starting with <code>E_</code>. A rejected trade lists every reason it has, not just the first.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Every problem, by kind of mapping</h2>
+  <p>Each problem belongs to one of the seven kinds from step 3: it is the moment that mapping can't do its job. Kinds 6 Calculate and 7 Nest have no problems of their own, because they only run on trades that passed every check.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Problem</th><th>Example</th><th>Outcome</th><th>Code</th></tr></thead>
+    <tbody>
+      <tr><td class="grp" colspan="4"><span class="kind"><b>1</b>Clean</span></td></tr>
+      <tr><td>Spaces, lower case, another spelling</td><td><span class="val"> Buy </span> <span class="val">usd</span> <span class="val">amend</span></td><td><span class="out fixed">Fixed</span></td><td class="muted">none</td></tr>
+      <tr><td>Side still isn't BUY or SELL</td><td><span class="val">HOLD</span>, empty</td><td><span class="out rejected">Rejected</span></td><td><code>E_SIDE_INVALID</code></td></tr>
+      <tr><td>Event type isn't NEW, AMEND or CANCEL</td><td><span class="val">SWAP</span></td><td><span class="out rejected">Rejected</span></td><td><code>E_EVENT_TYPE_INVALID</code></td></tr>
+      <tr><td>The same key twice</td><td>a trade id seen in an earlier row</td><td><span class="out dropped">Dropped</span></td><td class="muted">none; the first row wins</td></tr>
+      <tr><td>A row in a reference table with no key</td><td>a company with no id</td><td><span class="out dropped">Dropped</span></td><td class="muted">none</td></tr>
+      <tr><td>A trade with no key</td><td>empty <code>trade_id</code></td><td><span class="out rejected">Rejected</span></td><td><code>E_TRADE_ID_MISSING</code></td></tr>
+      <tr><td class="grp" colspan="4"><span class="kind"><b>2</b>Parse</span></td></tr>
+      <tr><td>A number with a comma</td><td><span class="val">1,250</span></td><td><span class="out fixed">Fixed</span></td><td class="muted">none</td></tr>
+      <tr><td>Quantity isn't a number above 0</td><td><span class="val">N/A</span> <span class="val">0</span></td><td><span class="out rejected">Rejected</span></td><td><code>E_QUANTITY_INVALID</code></td></tr>
+      <tr><td>Price isn't a number above 0</td><td><span class="val">-10.5</span></td><td><span class="out rejected">Rejected</span></td><td><code>E_PRICE_INVALID</code></td></tr>
+      <tr><td>Trade date isn't a real date</td><td><span class="val">2025-02-30</span> <span class="val">31/02/2025</span></td><td><span class="out rejected">Rejected</span></td><td><code>E_TRADE_DATE_INVALID</code></td></tr>
+      <tr><td>Settles before it was traded</td><td>traded 5 March, settles 2 March</td><td><span class="out rejected">Rejected</span></td><td><code>E_SETTLEMENT_BEFORE_TRADE</code></td></tr>
+      <tr><td>FX rate isn't a number above 0</td><td><span class="val">abc</span> <span class="val">0</span></td><td><span class="out rejected">Rejected</span>, every trade in that currency</td><td><code>E_CURRENCY_UNKNOWN</code></td></tr>
+      <tr><td class="grp" colspan="4"><span class="kind"><b>3</b>Fill</span></td></tr>
+      <tr><td>Settlement date empty or not a date</td><td><span class="val">N/A</span>: our trade</td><td><span class="out filled">Filled</span>: trade date + 2 days</td><td><code>W_SETTLEMENT_IMPUTED</code></td></tr>
+      <tr><td>Currency empty</td><td>empty</td><td><span class="out filled">Filled</span>: the instrument's currency</td><td><code>W_CURRENCY_IMPUTED</code></td></tr>
+      <tr><td class="grp" colspan="4"><span class="kind"><b>4</b>Look up</span></td></tr>
+      <tr><td>Instrument not found</td><td><span class="val">IN999999</span></td><td><span class="out rejected">Rejected</span></td><td><code>E_INSTRUMENT_UNRESOLVED</code></td></tr>
+      <tr><td>Counterparty not found</td><td><span class="val">CP9999999</span></td><td><span class="out rejected">Rejected</span></td><td><code>E_COUNTERPARTY_UNRESOLVED</code></td></tr>
+      <tr><td>Book not found</td><td><span class="val">BK9999</span></td><td><span class="out rejected">Rejected</span></td><td><code>E_BOOK_UNRESOLVED</code></td></tr>
+      <tr><td>Currency not in fx_rates</td><td><span class="val">XXX</span></td><td><span class="out rejected">Rejected</span></td><td><code>E_CURRENCY_UNKNOWN</code></td></tr>
+      <tr><td>Earlier version not found</td><td><span class="val">TR9999999999</span></td><td><span class="out rejected">Rejected</span></td><td><code>E_PREVIOUS_TRADE_UNRESOLVED</code></td></tr>
+      <tr><td>A whole table wasn't uploaded</td><td>no books file</td><td><span class="out rejected">Rejected</span>, every trade that links to it</td><td>that table's <code>E_…</code> code</td></tr>
+      <tr><td class="grp" colspan="4"><span class="kind"><b>5</b>Walk</span></td></tr>
+      <tr><td>Companies' parents go round in a loop</td><td>A's parent is B, B's parent is A</td><td><span class="out flagged">Flagged</span>: no top company</td><td><code>W_COUNTERPARTY_HIERARCHY_CYCLE</code></td></tr>
+      <tr><td>A parent company doesn't exist</td><td>parent <span class="val">CP9999999</span></td><td><span class="out flagged">Flagged</span>: the tree stops there</td><td><code>W_COUNTERPARTY_PARENT_UNRESOLVED</code></td></tr>
+      <tr><td>Trade versions go round in a loop</td><td>two trades each naming the other as earlier</td><td><span class="out flagged">Flagged</span>: no version number</td><td><code>W_LINEAGE_CYCLE</code></td></tr>
+      <tr><td>NEW with an earlier version, or AMEND / CANCEL without one</td><td><span class="val">NEW</span> with a <code>previous_trade_id</code></td><td><span class="out rejected">Rejected</span></td><td><code>E_EVENT_LINEAGE_MISMATCH</code></td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">Two things look like problems but aren't. A link can point to a row later in the file, and order doesn't matter. An instrument's issuer or underlying that can't be found simply leaves that part empty; only the trade's own links can reject it.</p>
+</section>
+
+<section>
+  <h2>What if our trade had one bad value?</h2>
+  <p>Our trade only had problems that end as <span class="out fixed">Fixed</span> or <span class="out filled">Filled</span>. Here is what one change to its row would do.</p>
+  <div class="grid">
+    <div class="example" style="margin:0"><span class="label">side = HOLD</span>
+      <p><span class="kind"><b>1</b>Clean</span> can't make it BUY or SELL, so it becomes empty. <span class="out rejected">Rejected</span>, and the line in <code>rejects.ndjson</code> is:</p>
+      <p><span class="val" style="white-space:normal">{"trade_id": "TR0000000042", "errors": ["E_SIDE_INVALID"], "warnings": ["W_SETTLEMENT_IMPUTED"], "record": {…, "side": null, …}}</span></p>
+      <p class="muted">The record holds the cleaned values, so you can see which one failed.</p></div>
+    <div class="example" style="margin:0"><span class="label">counterparty_id = CP9999999</span>
+      <p><span class="kind"><b>4</b>Look up</span> finds no such company. <span class="out rejected">Rejected</span> with <code>E_COUNTERPARTY_UNRESOLVED</code>; there would be nothing to copy into <span class="fld">counterparty</span>.</p></div>
+    <div class="example" style="margin:0"><span class="label">Aurora Bank's parent = CP9999999</span>
+      <p><span class="kind"><b>5</b>Walk</span> stops at Aurora Bank. <span class="out flagged">Flagged</span>: the trade is still delivered with <code>W_COUNTERPARTY_PARENT_UNRESOLVED</code>, Aurora Bank becomes its own top company (depth 0), and the exposure is counted under Aurora Bank instead of Summit Group.</p></div>
+    <div class="example" style="margin:0"><span class="label">the same row twice</span>
+      <p>The second copy has a trade id already seen. <span class="out dropped">Dropped</span> before any check. The first copy goes on as normal, and the trade tracker shows the second as a duplicate of the first.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Some rejections can be switched off</h2>
+  <p>On the dashboard's Rules tab, five of the thirteen reasons can be switched off for later runs. A trade whose only problems are switched off is then delivered. The other eight are locked, and the reason is always the same: <b>a later mapping needs that value</b>.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Locked reason</th><th>Why it can't be switched off</th></tr></thead>
+    <tbody>
+      <tr><td><code>E_QUANTITY_INVALID</code> <code>E_PRICE_INVALID</code></td><td><span class="kind"><b>6</b>Calculate</span> notional is quantity × price</td></tr>
+      <tr><td><code>E_CURRENCY_UNKNOWN</code></td><td><span class="kind"><b>6</b>Calculate</span> the US dollar amount needs a rate</td></tr>
+      <tr><td><code>E_INSTRUMENT_UNRESOLVED</code> <code>E_COUNTERPARTY_UNRESOLVED</code> <code>E_BOOK_UNRESOLVED</code></td><td><span class="kind"><b>4</b>Look up</span> the row must exist to be copied in</td></tr>
+      <tr><td><code>E_PREVIOUS_TRADE_UNRESOLVED</code></td><td><span class="kind"><b>5</b>Walk</span> a version chain needs the earlier version</td></tr>
+      <tr><td><code>E_TRADE_ID_MISSING</code></td><td>Every document and every output file is keyed by trade id</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">Can be switched off: event type, NEW/AMEND mismatch, trade date, settlement before trade, side. A test runs both engines with each of these off, to make sure they still agree.</p>
+</section>
+
+<section class="recap">
+  <h3>What to remember</h3>
+  <ul>
+    <li>A <b>problem</b> is a value a mapping can't use. Each one belongs to a kind of mapping from step 3.</li>
+    <li>Every problem has one of five <b>outcomes</b>: <span class="out fixed">Fixed</span> <span class="out filled">Filled</span> <span class="out flagged">Flagged</span> <span class="out dropped">Dropped</span> <span class="out rejected">Rejected</span>.</li>
+    <li>Reasons that a later mapping depends on can't be switched off.</li>
+  </ul>
+</section>
+
+<nav class="pager" aria-label="Previous and next page">
+  <a href="mappings.html"><span>Step 3</span><b>← Seven kinds of mapping</b></a>
+  <a class="next" href="engines.html"><span>Step 5</span><b>Two engines →</b></a>
+</nav>
+</main>
+<footer class="wrap">Part of <a href="../index.html">duckdb-jq-poc</a>. Also see the <a href="../blueprint.html">blueprint</a> and the <a href="../benchmark-report.html">benchmark report</a>.</footer>
+</html>

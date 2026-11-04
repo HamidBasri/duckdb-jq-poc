@@ -10,6 +10,10 @@ thousand to 1 million rows, and checked that they produce exactly the same outpu
 and the [visual blueprint](https://hamidbasri.github.io/duckdb-jq-poc/blueprint.html) (every part in
 pictures, a one-minute summary and a glossary)
 
+**Table by table:** the [mapping guide](https://hamidbasri.github.io/duckdb-jq-poc/mapping/) explains, in
+five short steps with one example trade, how every input column becomes output, what can go wrong,
+and whether DuckDB or jq handles each part better
+
 ## Results
 
 | Trades | DuckDB | jq | jq takes | Peak memory (DuckDB / jq) |

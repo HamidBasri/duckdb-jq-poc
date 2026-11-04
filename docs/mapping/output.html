@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mapping Guide: Output</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="guide.css">
+
+<header class="hero">
+  <div class="wrap">
+    <a class="guide" href="index.html">duckdb-jq-poc · Table Mapping Guide</a>
+    <h1>Step 2 · What comes out</h1>
+    <p>Three output files. The main one holds one JSON document per trade, built from all five tables.</p>
+    <ol class="ladder">
+      <li><a href="index.html" class="done">Start</a></li>
+      <li><a href="tables.html" class="done">Tables</a></li>
+      <li><a href="output.html" aria-current="page">Output</a></li>
+      <li><a href="mappings.html">Mappings</a></li>
+      <li><a href="problems.html">Problems</a></li>
+      <li><a href="engines.html">Engines</a></li>
+    </ol>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section>
+  <h2>Three new words</h2>
+  <dl class="define">
+    <dt>Output file</dt><dd>A file the pipeline writes. Each line in it is one JSON object.</dd>
+    <dt>Document</dt><dd>The JSON object for one trade, with the rows it links to copied inside it.</dd>
+    <dt>Field</dt><dd>One place in a document, written as a path: <span class="fld">economics.notional_usd</span> is <code>notional_usd</code> inside <code>economics</code>.</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>Where a trade row ends up</h2>
+  <p>Every trade row is checked. A row that passes becomes a document; a row that fails goes to the rejects file with its reasons. Documents are then added up into exposures.</p>
+  <figure>
+    <div class="pad"><svg class="dg" viewBox="0 0 960 220" style="min-width:720px" role="img" aria-label="A trade row is checked. If it passes it becomes a document in trades.ndjson; if it is the latest version and not cancelled, it is also added to exposures.ndjson. If it fails, it goes to rejects.ndjson with every reason.">
+      <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+      <g class="t-trades"><rect class="tc" x="10" y="80" width="150" height="60" rx="10"/><text class="t" x="28" y="106">A trade row</text><text class="s" x="28" y="126">from trades</text></g>
+      <rect class="box" x="220" y="80" width="150" height="60" rx="10"/><text class="t" x="238" y="106">Checked</text><text class="s" x="238" y="126">13 rules, step 4</text>
+      <rect class="file" x="450" y="20" width="210" height="60" rx="10"/><text class="t m" x="468" y="46">trades.ndjson</text><text class="s" x="468" y="66">one document per trade</text>
+      <rect class="file" x="740" y="20" width="210" height="60" rx="10"/><text class="t m" x="758" y="46">exposures.ndjson</text><text class="s" x="758" y="66">one line per top company</text>
+      <rect class="file" x="450" y="140" width="210" height="60" rx="10"/><text class="t m" x="468" y="166">rejects.ndjson</text><text class="s" x="468" y="186">one line per bad trade</text>
+      <path class="edge" d="M160 110H218" marker-end="url(#a)"/>
+      <path class="edge" d="M370 100H410V50H448" marker-end="url(#a)"/><text class="lbl" x="376" y="70">passes</text>
+      <path class="edge" d="M370 120H410V170H448" marker-end="url(#a)"/><text class="lbl" x="376" y="160">fails</text>
+      <path class="edge" d="M660 50H738" marker-end="url(#a)"/><text class="lbl mid" x="699" y="100">latest version,</text><text class="lbl mid" x="699" y="116">not cancelled</text>
+    </svg></div>
+    <figcaption><b>Every valid trade gets a document; only the current state of each trade counts in exposures.</b> If a trade was amended, only its latest version is added up, and a cancellation adds nothing. You can also choose run filters (dates, instrument types, minimum size) that leave valid trades out of the documents.</figcaption>
+  </figure>
+
+  <div class="tw"><table>
+    <thead><tr><th>Output file</th><th>One line is</th><th>Built from</th></tr></thead>
+    <tbody>
+      <tr><td><code>trades.ndjson</code></td><td>one valid trade, as a nested document</td><td>all five tables</td></tr>
+      <tr><td><code>rejects.ndjson</code></td><td>one rejected trade: its id, every reason, and its cleaned values</td><td>trades, plus the checks against the other four</td></tr>
+      <tr><td><code>exposures.ndjson</code></td><td>one top company: how much money is at stake with it and its subsidiaries</td><td>the documents in trades.ndjson</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Our trade's document</h2>
+  <p>This is what our trade looks like at the end. The colour on the left of each part shows which table it comes from: trades supplied the top lines, and the other tables are copied in through the links you saw in step 1.</p>
+  <div class="doc" role="figure" aria-label="The output document for trade TR0000000042, coloured by source table">
+    <div class="part t-trades"><span class="k">"trade_id"</span>: "TR0000000042", <span class="k">"event_type"</span>: "AMEND", <span class="k">"trade_date"</span>: "2025-01-10",<br><span class="k">"settlement_date"</span>: "2025-01-12", <span class="k">"side"</span>: "BUY",<span class="from">from trades</span></div>
+    <div class="part t-fx"><span class="k">"economics"</span>: { "quantity": 1250, "price": 101.5, "currency": "USD", "notional": 126875.0,<br>&nbsp;&nbsp;"fx_rate_to_usd": 1.0, "notional_usd": 126875.0 },<span class="from">from trades + fx_rates</span></div>
+    <div class="part t-instr"><span class="k">"instrument"</span>: { "instrument_id": "IN000123", "isin": "GB0000000123", "instrument_type": "OPTION",<br>&nbsp;&nbsp;"currency": "USD", "maturity_date": "2031-06-30", "issuer": null,<br>&nbsp;&nbsp;"underlying": { "instrument_id": "IN000045", "isin": "GB0000000045", "instrument_type": "EQUITY" } },<span class="from">from instruments</span></div>
+    <div class="part t-cpty"><span class="k">"counterparty"</span>: { "counterparty_id": "CP0004567", "legal_name": "Aurora Bank 0004567", "lei": "5493VQ0BR2PZ1MKG7T00",<br>&nbsp;&nbsp;"country": "GB", "sector": "Banking", "credit_rating": "AA",<br>&nbsp;&nbsp;"ultimate_parent": { "counterparty_id": "CP0000003", "legal_name": "Summit Group 0000003" },<br>&nbsp;&nbsp;"hierarchy_depth": 2, "hierarchy_path": ["CP0000003", "CP0000017", "CP0004567"],<br>&nbsp;&nbsp;"parent": { "counterparty_id": "CP0000017", "legal_name": "Aurora Holdings 0000017", "country": "GB",<br>&nbsp;&nbsp;&nbsp;&nbsp;"parent": { "counterparty_id": "CP0000003", "legal_name": "Summit Group 0000003", "country": "US", "parent": null } } },<span class="from">from counterparties</span></div>
+    <div class="part t-books"><span class="k">"book"</span>: { "book_id": "BK0012", "desk": "Equities", "trader": "A. Rahimi", "region": "EMEA" },<span class="from">from books</span></div>
+    <div class="part t-trades"><span class="k">"lineage"</span>: { "root_trade_id": "TR0000000017", "version": 2, "chain": ["TR0000000017", "TR0000000042"],<br>&nbsp;&nbsp;"previous_trade_id": "TR0000000017", "superseded_by": null, "is_latest": true },<span class="from">from trades</span></div>
+    <div class="part t-trades"><span class="k">"data_quality"</span>: { "warnings": ["W_SETTLEMENT_IMPUTED"] }<span class="from">from trades</span></div>
+  </div>
+  <p class="muted" style="margin-top:10px">Shown on several lines for reading; in the file it is one line. Compare it with the raw row in step 1: <span class="val"> Buy </span> became <span class="val">"BUY"</span>, <span class="val">1,250</span> became <span class="val">1250</span>, <span class="val">N/A</span> became a real date. Step 3 explains each change.</p>
+
+  <h3>Our trade in the other two files</h3>
+  <div class="grid">
+    <div class="card"><h4><code>exposures.ndjson</code></h4><p>Our trade is the latest version and not a cancellation, so it counts. It is added to the line for its top company, <b>CP0000003 Summit Group</b>: one more trade, gross <b>+126,875.00</b> US dollars, and net <b>+126,875.00</b> too, because it is a buy (a sell would subtract from net).</p></div>
+    <div class="card"><h4><code>rejects.ndjson</code></h4><p>Our trade passed every check, so it is not here. Step 4 shows what its line would look like if one value were bad.</p></div>
+  </div>
+</section>
+
+<section class="recap">
+  <h3>What to remember</h3>
+  <ul>
+    <li>Three output files: <b>trades</b> (documents), <b>rejects</b> (with reasons) and <b>exposures</b> (totals per top company).</li>
+    <li>A <b>document</b> is one trade with every row it links to copied inside it. A <b>field</b> is one place in it, written as a path.</li>
+    <li>Each part of a document comes from one table, reached through a link.</li>
+  </ul>
+</section>
+
+<nav class="pager" aria-label="Previous and next page">
+  <a href="tables.html"><span>Step 1</span><b>← The five tables</b></a>
+  <a class="next" href="mappings.html"><span>Step 3</span><b>Seven kinds of mapping →</b></a>
+</nav>
+</main>
+<footer class="wrap">Part of <a href="../index.html">duckdb-jq-poc</a>. Also see the <a href="../blueprint.html">blueprint</a> and the <a href="../benchmark-report.html">benchmark report</a>.</footer>
+</html>

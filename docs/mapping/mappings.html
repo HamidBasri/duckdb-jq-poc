@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mapping Guide: Mappings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="guide.css">
+
+<header class="hero">
+  <div class="wrap">
+    <a class="guide" href="index.html">duckdb-jq-poc · Table Mapping Guide</a>
+    <h1>Step 3 · Seven kinds of mapping</h1>
+    <p>How a value gets from a column in step 1 to a field in step 2.</p>
+    <ol class="ladder">
+      <li><a href="index.html" class="done">Start</a></li>
+      <li><a href="tables.html" class="done">Tables</a></li>
+      <li><a href="output.html" class="done">Output</a></li>
+      <li><a href="mappings.html" aria-current="page">Mappings</a></li>
+      <li><a href="problems.html">Problems</a></li>
+      <li><a href="engines.html">Engines</a></li>
+    </ol>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section>
+  <h2>One new word, with seven kinds</h2>
+  <dl class="define">
+    <dt>Mapping</dt><dd>The rule that turns a column's raw value into a field's value. Every mapping in this project is one of seven kinds, and a column often goes through more than one, in order.</dd>
+  </dl>
+  <p>Before any mapping, every column is <b>read as text</b>. That is why <span class="val">1,250</span> and <span class="val">N/A</span> survive long enough for a mapping to deal with them. Correction rules you set on the Rules tab are applied during this read, so they reach every dataset.</p>
+</section>
+
+<section>
+  <h2>Where each kind happens</h2>
+  <p>The pipeline has five stages. The kinds run in the stages below; kind 4 runs twice, first to check that a link exists, then to copy the row in.</p>
+  <figure>
+    <div class="pad"><svg class="dg" viewBox="0 0 960 190" style="min-width:760px" role="img" aria-label="Five stages left to right. Ingest reads every column as text. Clean runs kinds 1 Clean, 2 Parse and 3 Fill. Validate runs kind 4 Look up to check links. Transform runs 4 Look up to copy rows, 5 Walk, 6 Calculate and 7 Nest. Aggregate runs 6 Calculate for the totals.">
+      <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+      <rect class="soft" x="10" y="20" width="160" height="150" rx="10"/><text class="t" x="26" y="46">Ingest</text><text class="s" x="26" y="66">read as text</text>
+      <rect class="soft" x="200" y="20" width="160" height="150" rx="10"/><text class="t" x="216" y="46">Clean</text>
+      <rect class="soft" x="390" y="20" width="160" height="150" rx="10"/><text class="t" x="406" y="46">Validate</text>
+      <rect class="soft" x="580" y="20" width="180" height="150" rx="10"/><text class="t" x="596" y="46">Transform</text>
+      <rect class="soft" x="790" y="20" width="160" height="150" rx="10"/><text class="t" x="806" y="46">Aggregate</text>
+      <path class="edge" d="M170 95H198" marker-end="url(#a)"/><path class="edge" d="M360 95H388" marker-end="url(#a)"/>
+      <path class="edge" d="M550 95H578" marker-end="url(#a)"/><path class="edge" d="M760 95H788" marker-end="url(#a)"/>
+      <g><circle class="num" cx="226" cy="76" r="10"/><text class="numt" x="226" y="80">1</text><text x="244" y="81">Clean</text></g>
+      <g><circle class="num" cx="226" cy="104" r="10"/><text class="numt" x="226" y="108">2</text><text x="244" y="109">Parse</text></g>
+      <g><circle class="num" cx="226" cy="132" r="10"/><text class="numt" x="226" y="136">3</text><text x="244" y="137">Fill</text></g>
+      <g><circle class="num" cx="416" cy="76" r="10"/><text class="numt" x="416" y="80">4</text><text x="434" y="81">Look up</text><text class="s" x="434" y="99">does the link exist?</text></g>
+      <g><circle class="num" cx="606" cy="76" r="10"/><text class="numt" x="606" y="80">4</text><text x="624" y="81">Look up</text><text class="s" x="684" y="81">copy rows in</text></g>
+      <g><circle class="num" cx="606" cy="104" r="10"/><text class="numt" x="606" y="108">5</text><text x="624" y="109">Walk</text></g>
+      <g><circle class="num" cx="606" cy="132" r="10"/><text class="numt" x="606" y="136">6</text><text x="624" y="137">Calculate</text></g>
+      <g><circle class="num" cx="696" cy="104" r="10"/><text class="numt" x="696" y="108">7</text><text x="714" y="109">Nest</text></g>
+      <g><circle class="num" cx="816" cy="76" r="10"/><text class="numt" x="816" y="80">6</text><text x="834" y="81">Calculate</text><text class="s" x="834" y="99">the totals</text></g>
+    </svg></div>
+    <figcaption><b>Kinds 1 to 3 tidy a trade's own values. Kinds 4 to 7 bring the other tables in and build the document.</b> The numbers are the same on every page of this guide.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>The seven kinds, on our trade</h2>
+  <div class="grid">
+    <div class="card"><h4><span class="kind"><b>1</b>Clean</span></h4>
+      <p>Tidy a value without changing what it means: cut spaces, treat empty as missing, upper-case codes, pick one spelling.</p>
+      <div class="ba"><span class="val"> Buy </span><span class="arrow">→</span><span class="val">BUY</span></div>
+      <div class="ba"><span class="val">amend</span><span class="arrow">→</span><span class="val">AMEND</span> <span class="val">usd</span><span class="arrow">→</span><span class="val">USD</span></div>
+      <p class="muted">Used on every column.</p></div>
+    <div class="card"><h4><span class="kind"><b>2</b>Parse</span></h4>
+      <p>Turn text into a real date or number.</p>
+      <div class="ba"><span class="val">10/01/2025</span><span class="arrow">→</span><span class="val">2025-01-10</span></div>
+      <div class="ba"><span class="val">1,250</span><span class="arrow">→</span><span class="val">1250</span></div>
+      <p class="muted">Dates, quantity, price and the FX rate.</p></div>
+    <div class="card"><h4><span class="kind"><b>3</b>Fill</span></h4>
+      <p>Supply a missing value from somewhere safe, and attach a warning saying so.</p>
+      <div class="ba"><span class="val">N/A</span><span class="arrow">→</span><span class="val">2025-01-12</span></div>
+      <p>The trade date plus 2 days, with the warning <code>W_SETTLEMENT_IMPUTED</code>. An empty currency would be taken from the instrument.</p>
+      <p class="muted">Settlement date and currency only.</p></div>
+    <div class="card"><h4><span class="kind"><b>4</b>Look up</span></h4>
+      <p>Follow a link to the row it names, and copy that row in.</p>
+      <div class="ba"><span class="val">IN000123</span><span class="arrow">→</span><span class="fld">instrument { … }</span></div>
+      <div class="ba"><span class="val">USD</span><span class="arrow">→</span><span class="fld">fx_rate_to_usd: 1.0</span></div>
+      <p class="muted">Every link column from step 1.</p></div>
+    <div class="card"><h4><span class="kind"><b>5</b>Walk</span></h4>
+      <p>Look up again and again, following a chain to its end.</p>
+      <div class="ba"><span class="val">CP0004567</span><span class="arrow">→</span><span class="val">CP0000017</span><span class="arrow">→</span><span class="val">CP0000003</span></div>
+      <p>Top company Summit Group, depth 2, and the parents nested inside each other. The same idea gives version 2 from <span class="val">TR0000000017</span>.</p>
+      <p class="muted">The two chains: company parents and trade versions.</p></div>
+    <div class="card"><h4><span class="kind"><b>6</b>Calculate</span></h4>
+      <p>Work out a new value from others.</p>
+      <div class="ba"><span class="val">1250 × 101.5</span><span class="arrow">→</span><span class="fld">notional: 126875.0</span></div>
+      <div class="ba"><span class="val">× 1.0</span><span class="arrow">→</span><span class="fld">notional_usd: 126875.0</span></div>
+      <p class="muted">Amounts, "is this the latest version?", and the exposure totals.</p></div>
+    <div class="card"><h4><span class="kind"><b>7</b>Nest</span></h4>
+      <p>Put each value in its place in the document, inside the right part.</p>
+      <div class="ba"><span class="val">quantity, price, …</span><span class="arrow">→</span><span class="fld">economics { … }</span></div>
+      <p class="muted">Every document, at the end of transform.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Every column and its mappings</h2>
+  <p>The full list, one table at a time. The kinds are listed in the order they run.</p>
+
+  <details class="ref t-trades"><summary><span class="tname">trades</span><span class="muted">12 columns</span></summary>
+    <div class="tw"><table>
+      <thead><tr><th>Column</th><th>Kinds</th><th>Lands in</th></tr></thead>
+      <tbody>
+        <tr><td><code>trade_id</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">trade_id</span> <span class="fld">lineage.chain</span> <span class="fld">lineage.root_trade_id</span></td></tr>
+        <tr><td><code>previous_trade_id</code></td><td class="nw"><span class="kind"><b>4</b>Look up</span> <span class="kind"><b>5</b>Walk</span></td><td><span class="fld">lineage.previous_trade_id</span> <span class="fld">lineage.version</span> <span class="fld">lineage.superseded_by</span> <span class="fld">lineage.is_latest</span></td></tr>
+        <tr><td><code>event_type</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">event_type</span></td></tr>
+        <tr><td><code>trade_date</code></td><td class="nw"><span class="kind"><b>2</b>Parse</span></td><td><span class="fld">trade_date</span></td></tr>
+        <tr><td><code>settlement_date</code></td><td class="nw"><span class="kind"><b>2</b>Parse</span> <span class="kind"><b>3</b>Fill</span></td><td><span class="fld">settlement_date</span></td></tr>
+        <tr><td><code>instrument_id</code></td><td class="nw"><span class="kind"><b>4</b>Look up</span></td><td><span class="fld">instrument { … }</span></td></tr>
+        <tr><td><code>counterparty_id</code></td><td class="nw"><span class="kind"><b>4</b>Look up</span> <span class="kind"><b>5</b>Walk</span></td><td><span class="fld">counterparty { … }</span> and its exposures line</td></tr>
+        <tr><td><code>book_id</code></td><td class="nw"><span class="kind"><b>4</b>Look up</span></td><td><span class="fld">book { … }</span></td></tr>
+        <tr><td><code>side</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">side</span>, and plus or minus in exposures net</td></tr>
+        <tr><td><code>quantity</code></td><td class="nw"><span class="kind"><b>2</b>Parse</span> <span class="kind"><b>6</b>Calculate</span></td><td><span class="fld">economics.quantity</span> <span class="fld">economics.notional</span></td></tr>
+        <tr><td><code>price</code></td><td class="nw"><span class="kind"><b>2</b>Parse</span> <span class="kind"><b>6</b>Calculate</span></td><td><span class="fld">economics.price</span> <span class="fld">economics.notional</span></td></tr>
+        <tr><td><code>currency</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span> <span class="kind"><b>3</b>Fill</span> <span class="kind"><b>4</b>Look up</span></td><td><span class="fld">economics.currency</span> <span class="fld">economics.fx_rate_to_usd</span> <span class="fld">economics.notional_usd</span></td></tr>
+      </tbody>
+    </table></div>
+  </details>
+
+  <details class="ref t-cpty"><summary><span class="tname">counterparties</span><span class="muted">7 columns</span></summary>
+    <div class="tw"><table>
+      <thead><tr><th>Column</th><th>Kinds</th><th>Lands in</th></tr></thead>
+      <tbody>
+        <tr><td><code>counterparty_id</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">counterparty.counterparty_id</span> <span class="fld">instrument.issuer.counterparty_id</span> <span class="fld">exposures: ultimate_parent_id</span></td></tr>
+        <tr><td><code>legal_name</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">counterparty.legal_name</span> <span class="fld">instrument.issuer.legal_name</span> <span class="fld">counterparty.ultimate_parent.legal_name</span> <span class="fld">exposures: ultimate_parent_name</span></td></tr>
+        <tr><td><code>lei</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">counterparty.lei</span> <span class="fld">instrument.issuer.lei</span></td></tr>
+        <tr><td><code>country</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">counterparty.country</span> <span class="fld">counterparty.parent.country</span></td></tr>
+        <tr><td><code>sector</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">counterparty.sector</span></td></tr>
+        <tr><td><code>credit_rating</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">counterparty.credit_rating</span></td></tr>
+        <tr><td><code>parent_counterparty_id</code></td><td class="nw"><span class="kind"><b>5</b>Walk</span></td><td><span class="fld">counterparty.parent { … }</span> <span class="fld">counterparty.ultimate_parent</span> <span class="fld">counterparty.hierarchy_depth</span> <span class="fld">counterparty.hierarchy_path</span></td></tr>
+      </tbody>
+    </table></div>
+  </details>
+
+  <details class="ref t-instr"><summary><span class="tname">instruments</span><span class="muted">7 columns</span></summary>
+    <div class="tw"><table>
+      <thead><tr><th>Column</th><th>Kinds</th><th>Lands in</th></tr></thead>
+      <tbody>
+        <tr><td><code>instrument_id</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">instrument.instrument_id</span> <span class="fld">instrument.underlying.instrument_id</span></td></tr>
+        <tr><td><code>isin</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">instrument.isin</span> <span class="fld">instrument.underlying.isin</span></td></tr>
+        <tr><td><code>instrument_type</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">instrument.instrument_type</span> <span class="fld">instrument.underlying.instrument_type</span></td></tr>
+        <tr><td><code>currency</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">instrument.currency</span>, and fills a trade's missing currency</td></tr>
+        <tr><td><code>issuer_counterparty_id</code></td><td class="nw"><span class="kind"><b>4</b>Look up</span></td><td><span class="fld">instrument.issuer { … }</span> (equities and bonds)</td></tr>
+        <tr><td><code>underlying_instrument_id</code></td><td class="nw"><span class="kind"><b>4</b>Look up</span></td><td><span class="fld">instrument.underlying { … }</span> (futures and options; one level only)</td></tr>
+        <tr><td><code>maturity_date</code></td><td class="nw"><span class="kind"><b>2</b>Parse</span></td><td><span class="fld">instrument.maturity_date</span></td></tr>
+      </tbody>
+    </table></div>
+  </details>
+
+  <details class="ref t-books"><summary><span class="tname">books</span><span class="muted">4 columns</span></summary>
+    <div class="tw"><table>
+      <thead><tr><th>Column</th><th>Kinds</th><th>Lands in</th></tr></thead>
+      <tbody>
+        <tr><td><code>book_id</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">book.book_id</span></td></tr>
+        <tr><td><code>desk</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">book.desk</span></td></tr>
+        <tr><td><code>trader</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">book.trader</span></td></tr>
+        <tr><td><code>region</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td><span class="fld">book.region</span></td></tr>
+      </tbody>
+    </table></div>
+  </details>
+
+  <details class="ref t-fx"><summary><span class="tname">fx_rates</span><span class="muted">2 columns</span></summary>
+    <div class="tw"><table>
+      <thead><tr><th>Column</th><th>Kinds</th><th>Lands in</th></tr></thead>
+      <tbody>
+        <tr><td><code>currency</code></td><td class="nw"><span class="kind"><b>1</b>Clean</span></td><td>the key a trade's currency is looked up by</td></tr>
+        <tr><td><code>rate_to_usd</code></td><td class="nw"><span class="kind"><b>2</b>Parse</span> <span class="kind"><b>6</b>Calculate</span></td><td><span class="fld">economics.fx_rate_to_usd</span> <span class="fld">economics.notional_usd</span>, and every amount in exposures</td></tr>
+      </tbody>
+    </table></div>
+  </details>
+  <p class="muted">Every column is trimmed by kind 1 first, so Clean is listed only where it is the main change. Kind 7, Nest, applies to every field, so it isn't repeated either.</p>
+</section>
+
+<section class="recap">
+  <h3>What to remember</h3>
+  <ul>
+    <li>A <b>mapping</b> turns a raw value into a field's value. There are seven kinds: <b>1 Clean, 2 Parse, 3 Fill, 4 Look up, 5 Walk, 6 Calculate, 7 Nest</b>.</li>
+    <li>Kinds 1 to 3 tidy a trade's own values. Kinds 4 to 7 bring the other tables in and build the document.</li>
+    <li>On our trade, every messy value from step 1 was handled by kind 1, 2 or 3.</li>
+  </ul>
+</section>
+
+<nav class="pager" aria-label="Previous and next page">
+  <a href="output.html"><span>Step 2</span><b>← What comes out</b></a>
+  <a class="next" href="problems.html"><span>Step 4</span><b>Problems and outcomes →</b></a>
+</nav>
+</main>
+<footer class="wrap">Part of <a href="../index.html">duckdb-jq-poc</a>. Also see the <a href="../blueprint.html">blueprint</a> and the <a href="../benchmark-report.html">benchmark report</a>.</footer>
+</html>

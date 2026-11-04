@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mapping Guide: Tables</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="guide.css">
+
+<header class="hero">
+  <div class="wrap">
+    <a class="guide" href="index.html">duckdb-jq-poc · Table Mapping Guide</a>
+    <h1>Step 1 · The five tables</h1>
+    <p>What comes in: five tables that point at each other.</p>
+    <ol class="ladder">
+      <li><a href="index.html" class="done">Start</a></li>
+      <li><a href="tables.html" aria-current="page">Tables</a></li>
+      <li><a href="output.html">Output</a></li>
+      <li><a href="mappings.html">Mappings</a></li>
+      <li><a href="problems.html">Problems</a></li>
+      <li><a href="engines.html">Engines</a></li>
+    </ol>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section>
+  <h2>Five words to start with</h2>
+  <dl class="define">
+    <dt>Table</dt><dd>One input file, CSV or Parquet. There are five.</dd>
+    <dt>Row</dt><dd>One thing in a table: one trade, one company, one instrument.</dd>
+    <dt>Column</dt><dd>One piece of information about every row, like <code>price</code>. Every column arrives as text, even numbers and dates.</dd>
+    <dt>Key</dt><dd>The column that names a row, so other rows can find it. In trades it is <code>trade_id</code>.</dd>
+    <dt>Link</dt><dd>A column that holds another row's key. A trade's <code>book_id</code> is a link to a row in books.</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>The tables and their links</h2>
+  <p>trades sits in the middle and links to the other four. Three links point back into their own table, which makes chains: a trade's earlier version, a company's parent, an instrument's underlying.</p>
+  <figure>
+    <div class="pad"><svg class="dg" viewBox="0 0 960 380" style="min-width:720px" role="img" aria-label="trades links to counterparties, instruments, books and fx_rates, and to itself through previous_trade_id. counterparties links to itself through its parent. instruments links to itself through its underlying, and to counterparties through its issuer.">
+      <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+      <g class="t-trades"><rect class="tc" x="80" y="120" width="220" height="120" rx="10"/><circle class="tdot" cx="102" cy="146" r="6"/>
+        <text class="t m" x="116" y="151">trades</text><text class="s" x="98" y="178">key: trade_id</text><text class="s" x="98" y="198">one row per trade event</text><text class="s" x="98" y="218">becomes the output documents</text></g>
+      <g class="t-cpty"><rect class="tc" x="520" y="25" width="240" height="60" rx="10"/><circle class="tdot" cx="542" cy="49" r="6"/>
+        <text class="t m" x="556" y="54">counterparties</text><text class="s" x="538" y="74">key: counterparty_id · companies</text></g>
+      <g class="t-instr"><rect class="tc" x="520" y="125" width="240" height="60" rx="10"/><circle class="tdot" cx="542" cy="149" r="6"/>
+        <text class="t m" x="556" y="154">instruments</text><text class="s" x="538" y="174">key: instrument_id · what was traded</text></g>
+      <g class="t-books"><rect class="tc" x="520" y="225" width="240" height="60" rx="10"/><circle class="tdot" cx="542" cy="249" r="6"/>
+        <text class="t m" x="556" y="254">books</text><text class="s" x="538" y="274">key: book_id · desks and traders</text></g>
+      <g class="t-fx"><rect class="tc" x="520" y="305" width="240" height="60" rx="10"/><circle class="tdot" cx="542" cy="329" r="6"/>
+        <text class="t m" x="556" y="334">fx_rates</text><text class="s" x="538" y="354">key: currency · rate to US dollars</text></g>
+      <path class="edge" d="M300 135H400V55H518" marker-end="url(#a)"/><text class="lbl m mid" x="459" y="48">counterparty_id</text>
+      <path class="edge" d="M300 160H420V155H518" marker-end="url(#a)"/><text class="lbl m mid" x="469" y="148">instrument_id</text>
+      <path class="edge" d="M300 185H460V255H518" marker-end="url(#a)"/><text class="lbl m mid" x="489" y="248">book_id</text>
+      <path class="edge" d="M300 210H440V335H518" marker-end="url(#a)"/><text class="lbl m mid" x="479" y="328">currency</text>
+      <path class="edge dash" d="M80 150H44V205H78" marker-end="url(#a)"/><text class="lbl m mid" transform="rotate(-90 30 178)" x="30" y="182">previous</text>
+      <path class="edge dash" d="M760 45H800V70H762" marker-end="url(#a)"/><text class="lbl m" x="806" y="62">parent</text>
+      <path class="edge dash" d="M760 145H800V170H762" marker-end="url(#a)"/><text class="lbl m" x="806" y="162">underlying</text>
+      <path class="edge" d="M760 133H900V35H762" marker-end="url(#a)"/><text class="lbl m" x="906" y="90">issuer</text>
+    </svg></div>
+    <figcaption><b>Arrows go from a link to the key it points at.</b> Solid arrows join two tables; dashed arrows point back into the same table. The dashed ones are <code>previous_trade_id</code>, <code>parent_counterparty_id</code> and <code>underlying_instrument_id</code>; the issuer arrow is <code>issuer_counterparty_id</code>.</figcaption>
+  </figure>
+
+  <div class="tw"><table>
+    <thead><tr><th>Table</th><th>One row is</th><th>Key</th><th>Links to</th><th>Size in the generated data</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tname t-trades">trades</span></td><td>a trade event: new, amended or cancelled</td><td><code>trade_id</code></td><td>all four others, and itself</td><td>what you ask for: 5k to 5M</td></tr>
+      <tr><td><span class="tname t-cpty">counterparties</span></td><td>a company</td><td><code>counterparty_id</code></td><td>itself (parent)</td><td>1 per 50 trades, 50 to 50,000</td></tr>
+      <tr><td><span class="tname t-instr">instruments</span></td><td>something that can be traded</td><td><code>instrument_id</code></td><td>counterparties (issuer), itself (underlying)</td><td>1 per 100 trades, 40 to 20,000</td></tr>
+      <tr><td><span class="tname t-books">books</span></td><td>a desk and its trader</td><td><code>book_id</code></td><td>nothing</td><td>1 per 2,000 trades, 20 to 200</td></tr>
+      <tr><td><span class="tname t-fx">fx_rates</span></td><td>a currency and its rate to US dollars</td><td><code>currency</code></td><td>nothing</td><td>9 currencies</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Our trade, and the rows it points to</h2>
+  <p>Here is the same picture with real rows instead of tables. Our trade links to one row in each of the other tables, and two of those rows link further.</p>
+  <figure>
+    <div class="pad"><svg class="dg" viewBox="0 0 965 330" style="min-width:760px" role="img" aria-label="Trade TR0000000042 links to its earlier version TR0000000017, to instrument IN000123 whose underlying is IN000045, to counterparty CP0004567 whose parent is CP0000017 whose parent is CP0000003, to book BK0012, and to currency USD.">
+      <defs><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+      <g class="t-trades"><rect class="tc" x="10" y="115" width="250" height="100" rx="10"/><circle class="tdot" cx="30" cy="139" r="6"/>
+        <text class="t m" x="44" y="144">TR0000000042</text><text class="s" x="28" y="168">our trade · an amendment</text><text class="s" x="28" y="188">buy 1,250 at 101.5 USD</text></g>
+      <g class="t-trades"><rect class="tc" x="340" y="10" width="190" height="48" rx="9"/><text class="m" x="356" y="31">TR0000000017</text><text class="s" x="356" y="48">the original (NEW)</text></g>
+      <g class="t-instr"><rect class="tc" x="340" y="75" width="190" height="48" rx="9"/><text class="m" x="356" y="96">IN000123</text><text class="s" x="356" y="113">an option</text></g>
+      <g class="t-instr"><rect class="tc" x="610" y="75" width="160" height="48" rx="9"/><text class="m" x="626" y="96">IN000045</text><text class="s" x="626" y="113">an equity</text></g>
+      <g class="t-cpty"><rect class="tc" x="340" y="140" width="190" height="48" rx="9"/><text class="m" x="356" y="161">CP0004567</text><text class="s" x="356" y="178">Aurora Bank</text></g>
+      <g class="t-cpty"><rect class="tc" x="610" y="140" width="160" height="48" rx="9"/><text class="m" x="626" y="161">CP0000017</text><text class="s" x="626" y="178">Aurora Holdings</text></g>
+      <g class="t-cpty"><rect class="tc" x="830" y="140" width="125" height="48" rx="9"/><text class="m" x="844" y="161">CP0000003</text><text class="s" x="844" y="178">Summit Group (top)</text></g>
+      <g class="t-books"><rect class="tc" x="340" y="205" width="190" height="48" rx="9"/><text class="m" x="356" y="226">BK0012</text><text class="s" x="356" y="243">Equities · A. Rahimi</text></g>
+      <g class="t-fx"><rect class="tc" x="340" y="270" width="190" height="48" rx="9"/><text class="m" x="356" y="291">USD</text><text class="s" x="356" y="308">1 US dollar = 1.0</text></g>
+      <path class="edge dash" d="M260 130H290V34H338" marker-end="url(#b)"/><text class="lbl m mid" x="314" y="27">previous</text>
+      <path class="edge" d="M260 150H305V99H338" marker-end="url(#b)"/>
+      <path class="edge" d="M260 165H338" marker-end="url(#b)"/>
+      <path class="edge" d="M260 180H305V229H338" marker-end="url(#b)"/>
+      <path class="edge" d="M260 200H290V294H338" marker-end="url(#b)"/>
+      <path class="edge dash" d="M530 99H608" marker-end="url(#b)"/><text class="lbl m mid" x="569" y="92">underlying</text>
+      <path class="edge dash" d="M530 164H608" marker-end="url(#b)"/><text class="lbl m mid" x="569" y="157">parent</text>
+      <path class="edge dash" d="M770 164H828" marker-end="url(#b)"/><text class="lbl m mid" x="799" y="157">parent</text>
+    </svg></div>
+    <figcaption><b>Six rows in four other tables, all reached from one trade.</b> Following the dashed arrows to the end is a chain: two versions of the trade, and three levels of companies with Summit Group at the top.</figcaption>
+  </figure>
+
+  <h3>Our trade's row, exactly as it arrives</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Column</th><th>Raw value</th><th>What's odd about it</th></tr></thead>
+    <tbody>
+      <tr><td><code>trade_id</code></td><td><span class="val">TR0000000042</span></td><td class="muted">nothing: the key</td></tr>
+      <tr><td><code>previous_trade_id</code></td><td><span class="val">TR0000000017</span></td><td class="muted">a link into trades itself</td></tr>
+      <tr><td><code>event_type</code></td><td><span class="val">amend</span></td><td>lower case</td></tr>
+      <tr><td><code>trade_date</code></td><td><span class="val">10/01/2025</span></td><td>day first, not year first</td></tr>
+      <tr><td><code>settlement_date</code></td><td><span class="val">N/A</span></td><td>not a date at all</td></tr>
+      <tr><td><code>instrument_id</code></td><td><span class="val">IN000123</span></td><td class="muted">a link</td></tr>
+      <tr><td><code>counterparty_id</code></td><td><span class="val">CP0004567</span></td><td class="muted">a link</td></tr>
+      <tr><td><code>book_id</code></td><td><span class="val">BK0012</span></td><td class="muted">a link</td></tr>
+      <tr><td><code>side</code></td><td><span class="val"> Buy </span></td><td>spaces around, mixed case</td></tr>
+      <tr><td><code>quantity</code></td><td><span class="val">1,250</span></td><td>a comma inside a number</td></tr>
+      <tr><td><code>price</code></td><td><span class="val">101.5</span></td><td class="muted">fine, but still text</td></tr>
+      <tr><td><code>currency</code></td><td><span class="val">usd</span></td><td>lower case; also a link to fx_rates</td></tr>
+    </tbody>
+  </table></div>
+  <p class="muted">These are the same kinds of mess the data generator adds on purpose to a share of rows. Every one of them is dealt with in step 3 or 4.</p>
+</section>
+
+<section class="recap">
+  <h3>What to remember</h3>
+  <ul>
+    <li>Five tables come in. Only <b>trades</b> becomes output documents; the other four are looked up through links.</li>
+    <li>A <b>key</b> names a row. A <b>link</b> is a column holding another row's key.</li>
+    <li>Three links point back into their own table and make <b>chains</b>. Those chains are the hardest part, and they come back in step 3.</li>
+    <li>Every column arrives as <b>text</b>, mess included.</li>
+  </ul>
+</section>
+
+<nav class="pager" aria-label="Previous and next page">
+  <a href="index.html"><span>Start</span><b>← The whole idea</b></a>
+  <a class="next" href="output.html"><span>Step 2</span><b>What comes out →</b></a>
+</nav>
+</main>
+<footer class="wrap">Part of <a href="../index.html">duckdb-jq-poc</a>. Also see the <a href="../blueprint.html">blueprint</a> and the <a href="../benchmark-report.html">benchmark report</a>.</footer>
+</html>
