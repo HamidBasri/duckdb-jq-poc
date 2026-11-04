@@ -11,7 +11,7 @@ from pathlib import Path
 import duckdb
 
 from app.common.files import count_lines
-from app.config import EngineSettings
+from app.config import JQ_VERSION, EngineSettings
 from app.domain.models import Engine, Entity, OutputName, Stage
 from app.domain.ports import RunContext, StageResult
 from app.engines.jq_engine.runner import JqRunner
@@ -25,7 +25,7 @@ class JqEngine:
     name = Engine.JQ
 
     def __init__(self, settings: EngineSettings, work_dir: Path) -> None:
-        self._runner = JqRunner(settings.jq_binary, PROGRAMS_DIR, settings.jq_timeout_seconds)
+        self._runner = JqRunner(settings.jq_binary, PROGRAMS_DIR, settings.jq_timeout_seconds, JQ_VERSION)
         self._keep_intermediates = settings.keep_intermediates
         self._raw = work_dir / "raw"
         self._clean = work_dir / "clean"

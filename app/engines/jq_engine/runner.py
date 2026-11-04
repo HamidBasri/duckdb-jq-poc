@@ -3,6 +3,7 @@
 import json
 import subprocess
 from collections.abc import Mapping, Sequence
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -13,10 +14,37 @@ class JqError(RuntimeError):
     """jq exited non-zero, timed out or was killed."""
 
 
+@cache
+def jq_version(binary: str) -> str:
+    """The version `binary` reports, such as "1.8.2" or "1.7.1-apple".
+
+    Raises:
+        JqError: the binary can't be run.
+    """
+    try:
+        completed = subprocess.run(
+            [binary, "--version"], capture_output=True, text=True, timeout=10, check=True
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise JqError(f"can't run jq at {binary!r} ({exc}); run `make jq`") from exc
+    return completed.stdout.strip().removeprefix("jq-")
+
+
 class JqRunner:
     """Runs jq programs from one directory with `-n -c`, so programs consume `inputs` lazily."""
 
-    def __init__(self, binary: str, programs_dir: Path, timeout_seconds: float) -> None:
+    def __init__(self, binary: str, programs_dir: Path, timeout_seconds: float, version: str) -> None:
+        """Check that `binary` is jq `version`, the one the programs are tested with. Other versions
+        can lack builtins they use: macOS's own jq 1.7.1 has no `trim`.
+
+        Raises:
+            JqError: `binary` can't be run or reports another version.
+        """
+        if (found := jq_version(binary)) != version:
+            raise JqError(
+                f"{binary} is jq {found}, but this project needs jq {version} (see .jq-version). "
+                f"Run `make jq`, or set POC_ENGINE__JQ_BINARY to a jq {version}."
+            )
         self._binary = binary
         self._programs_dir = programs_dir
         self._timeout_seconds = timeout_seconds

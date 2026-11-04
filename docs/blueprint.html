@@ -1591,7 +1591,8 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
     <thead><tr><th>Command</th><th>What it does</th></tr></thead>
     <tbody>
       <tr><td><code>make setup</code></td><td>Checks the tools, installs, creates the 5k, 50k and 500k datasets and runs the tests</td></tr>
-      <tr><td><code>make check-tools</code></td><td>Checks that uv and jq 1.7 or newer are installed</td></tr>
+      <tr><td><code>make check-tools</code></td><td>Checks that uv is installed and that <code>.tools/jq</code> is the pinned jq (downloads it if missing)</td></tr>
+      <tr><td><code>make jq</code></td><td>Downloads jq 1.8.2, the version in <code>.jq-version</code>, from the official release into <code>.tools/</code>, and checks its SHA-256 against <code>jq.sha256</code></td></tr>
       <tr><td><code>make install</code></td><td>Installs the Python dependencies</td></tr>
       <tr><td><code>make run</code></td><td>Starts the dashboard on <code>http://127.0.0.1:8000</code> (tracker on <code>/tracker</code>)</td></tr>
       <tr><td><code>make test</code></td><td>Runs the test suite</td></tr>
@@ -1600,7 +1601,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
       <tr><td><code>make benchmark</code></td><td>Runs both engines on 5k to 1M rows, checks the outputs match, saves results in <code>data/reports/</code></td></tr>
       <tr><td><code>make scenarios</code></td><td>Stress tests at 50k rows: 200-level company trees, then 100-step amendment chains</td></tr>
       <tr><td><code>make reset</code></td><td>Deletes <code>data/runs</code> and <code>data/state</code> (so run records and rule versions too), logs and caches. Keeps datasets and reports</td></tr>
-      <tr><td><code>make clean</code></td><td>Deletes everything generated: the whole <code>data/</code> folder, the virtualenv and caches</td></tr>
+      <tr><td><code>make clean</code></td><td>Deletes everything generated: the whole <code>data/</code> folder, the virtualenv, <code>.tools/</code> and caches</td></tr>
       <tr><td><code>make fresh</code></td><td><code>make clean</code>, then <code>make setup</code></td></tr>
     </tbody>
   </table></div>
@@ -1619,6 +1620,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
       <tr><td><code>POC_ENGINE__DUCKDB_LEAN</code></td><td><code>false</code></td><td>Streams the output and drops tables early: less memory</td></tr>
       <tr><td><code>POC_ENGINE__DUCKDB_PRESERVE_INSERTION_ORDER</code></td><td><code>true</code></td><td><code>false</code> is faster and leaner, but output row order changes</td></tr>
       <tr><td><code>POC_ENGINE__DUCKDB_STORAGE</code></td><td><code>memory</code></td><td><code>disk</code> keeps tables in a database file</td></tr>
+      <tr><td><code>POC_ENGINE__JQ_BINARY</code></td><td><code>.tools/jq</code></td><td>Another jq to use. It must be jq 1.8.2, or jq runs fail with a message that says so</td></tr>
       <tr><td><code>POC_ENGINE__JQ_MAX_RSS_MB</code></td><td><code>12000</code></td><td>jq is stopped above this much memory</td></tr>
       <tr><td><code>POC_ENGINE__JQ_TIMEOUT_SECONDS</code></td><td><code>3600</code></td><td>jq is stopped after this long</td></tr>
       <tr><td><code>POC_ENGINE__KEEP_INTERMEDIATES</code></td><td><code>false</code></td><td>Keep each run's <code>work/</code> folder of in-between files, for debugging</td></tr>
@@ -1696,6 +1698,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
       <dt>Repository</dt><dd>Saves and loads one kind of record; here, as JSON files.</dd>
       <dt>SSE</dt><dd>Server-sent events: one long HTTP response the server keeps writing events into. It's how pages update live.</dd>
       <dt>202 Accepted</dt><dd>The HTTP answer for "got it, working on it in the background".</dd>
+      <dt>Pinned jq</dt><dd>The project runs one exact jq version, 1.8.2, kept in <code>.tools/</code>. Other versions can lack functions the jq programs use (macOS's own jq has no <code>trim</code>), so the jq engine refuses them.</dd>
       <dt>Parity test</dt><dd>A test that runs both engines on the same data and checks they give the same output.</dd>
     </dl></section>
   </div>

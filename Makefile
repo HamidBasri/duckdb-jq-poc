@@ -1,7 +1,10 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup check-tools install run test lint datasets benchmark scenarios server-stopped reset clean fresh
+.PHONY: help setup check-tools jq install run test lint datasets benchmark scenarios server-stopped reset clean fresh
 
-JQ_MIN_VERSION := 1.7
+# The jq engine is tested with exactly this jq; other versions can lack builtins it uses (macOS's own
+# jq 1.7.1 has no trim). make jq downloads it from the official release and checks it against jq.sha256.
+JQ_VERSION := $(shell cat .jq-version)
+JQ := .tools/jq
 
 help:  ## list the commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -11,13 +14,32 @@ setup: check-tools install  ## make the project ready: check tools, install, sma
 	uv run pytest -q
 	@echo "Ready. Start the app with: make run"
 
-check-tools:  ## check that uv and jq >= 1.7 are installed
+check-tools: $(JQ)  ## check that uv is installed and the pinned jq is in .tools/
 	@command -v uv >/dev/null || { echo "uv is missing: https://docs.astral.sh/uv/getting-started/installation/"; exit 1; }
-	@command -v jq >/dev/null || { echo "jq is missing: brew install jq (macOS) or apt install jq (Debian/Ubuntu)"; exit 1; }
-	@version=$$(jq --version | sed 's/^jq-//'); \
-	 lowest=$$(printf '%s\n%s\n' "$(JQ_MIN_VERSION)" "$$version" | sort -V | head -1); \
-	 [ "$$lowest" = "$(JQ_MIN_VERSION)" ] || { echo "jq $$version is too old; need $(JQ_MIN_VERSION) or newer"; exit 1; }; \
-	 echo "uv $$(uv --version | cut -d' ' -f2), jq $$version: ok"
+	@[ "$$($(JQ) --version)" = "jq-$(JQ_VERSION)" ] || { echo "$(JQ) is not jq $(JQ_VERSION); delete it and run make jq"; exit 1; }
+	@echo "uv $$(uv --version | cut -d' ' -f2), jq $(JQ_VERSION): ok"
+
+jq: $(JQ)  ## download the pinned jq (version in .jq-version) into .tools/
+
+$(JQ): .jq-version jq.sha256
+	@command -v curl >/dev/null || { echo "curl is missing; it is needed to download jq"; exit 1; }
+	@case "$$(uname -s)-$$(uname -m)" in \
+	   Darwin-arm64) asset=jq-macos-arm64 ;; \
+	   Darwin-x86_64) asset=jq-macos-amd64 ;; \
+	   Linux-x86_64) asset=jq-linux-amd64 ;; \
+	   Linux-aarch64|Linux-arm64) asset=jq-linux-arm64 ;; \
+	   *) echo "No pinned jq for $$(uname -s) $$(uname -m). Install jq $(JQ_VERSION) and set POC_ENGINE__JQ_BINARY to it."; exit 1 ;; \
+	 esac; \
+	 mkdir -p .tools; \
+	 echo "Downloading jq $(JQ_VERSION) ($$asset)"; \
+	 curl -fsSL --retry 3 -o .tools/$$asset.part "https://github.com/jqlang/jq/releases/download/jq-$(JQ_VERSION)/$$asset" || exit 1; \
+	 expected=$$(awk -v a="$$asset" '$$2 == a { print $$1 }' jq.sha256); \
+	 actual=$$( (shasum -a 256 .tools/$$asset.part 2>/dev/null || sha256sum .tools/$$asset.part) | cut -d' ' -f1); \
+	 if [ -z "$$expected" ] || [ "$$actual" != "$$expected" ]; then \
+	   rm -f .tools/$$asset.part; echo "Checksum of $$asset does not match jq.sha256; nothing installed"; exit 1; \
+	 fi; \
+	 chmod +x .tools/$$asset.part && mv .tools/$$asset.part $(JQ); \
+	 echo "jq $(JQ_VERSION) installed in $(JQ)"
 
 install:  ## install Python dependencies
 	uv sync
@@ -52,8 +74,8 @@ reset: server-stopped  ## delete temporary files: run outputs, saved state, logs
 	find app tests -type d -name __pycache__ -prune -exec rm -rf {} +
 	@echo "Temporary files removed. Datasets in data/datasets and reports in data/reports were kept."
 
-clean: server-stopped  ## delete everything generated: datasets, reports, outputs, virtualenv, caches
-	rm -rf data .venv .pytest_cache .ruff_cache .mypy_cache
+clean: server-stopped  ## delete everything generated: datasets, reports, outputs, virtualenv, jq, caches
+	rm -rf data .venv .tools .pytest_cache .ruff_cache .mypy_cache
 	find app tests -type d -name __pycache__ -prune -exec rm -rf {} +
 	find . -name .DS_Store -not -path "./.git/*" -delete
 	@echo "Back to a fresh checkout. Your code, docs, .vscode and description are untouched. Run: make setup"

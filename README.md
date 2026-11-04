@@ -27,7 +27,11 @@ Measured on an Apple Silicon laptop (10 cores, 16 GB), Parquet input, one run pe
 
 ## Quick start
 
-You need Python 3.12+, [uv](https://docs.astral.sh/uv/) and jq 1.7 or newer.
+You need Python 3.12+, [uv](https://docs.astral.sh/uv/) and curl, on macOS or Linux. The jq engine is
+pinned to jq 1.8.2 (the version in `.jq-version`), the version it is tested with; other versions can
+lack functions it uses (macOS's own `/usr/bin/jq` 1.7.1 has no `trim`). `make setup` downloads jq 1.8.2
+from the official release into `.tools/` and checks it against the SHA-256 sums in `jq.sha256`. Your
+system jq is left as it is.
 
 ```bash
 make setup       # check tools, install, create small datasets, run the tests
@@ -42,7 +46,8 @@ make benchmark   # 5k to 1M rows, both engines, results in data/reports/
 | Command | What it does |
 |---|---|
 | `make setup` | Checks the tools, installs, creates the 5k, 50k and 500k datasets and runs the tests |
-| `make check-tools` | Checks that uv and jq 1.7 or newer are installed |
+| `make check-tools` | Checks that uv is installed and that `.tools/jq` is the pinned jq (downloads it if missing) |
+| `make jq` | Downloads the pinned jq into `.tools/` and checks its SHA-256 |
 | `make install` | Installs the Python dependencies |
 | `make run` | Starts the API and dashboard on `http://127.0.0.1:8000` (trade tracker on `/tracker`) |
 | `make test` | Runs the test suite |
@@ -51,7 +56,7 @@ make benchmark   # 5k to 1M rows, both engines, results in data/reports/
 | `make benchmark` | Runs both engines on 5k to 1M rows, checks the outputs match, saves results in `data/reports/` |
 | `make scenarios` | Stress tests: 200-level company trees and 100-step amendment chains, at 50k rows |
 | `make reset` | Deletes run outputs, saved state (including rule versions), logs and caches. Keeps datasets and reports |
-| `make clean` | Deletes everything generated: datasets, reports, outputs, virtualenv and caches |
+| `make clean` | Deletes everything generated: datasets, reports, outputs, virtualenv, `.tools/` and caches |
 | `make fresh` | `make clean`, then `make setup` |
 
 `reset`, `clean` and `fresh` refuse to run while the API server is running.
@@ -158,6 +163,7 @@ Set these as environment variables.
 | `POC_ENGINE__DUCKDB_LEAN` | `false` | Stream the output and drop tables early (less memory) |
 | `POC_ENGINE__DUCKDB_PRESERVE_INSERTION_ORDER` | `true` | `false` is faster and leaner, but output row order changes |
 | `POC_ENGINE__DUCKDB_STORAGE` | `memory` | `disk` keeps tables in a database file |
+| `POC_ENGINE__JQ_BINARY` | `.tools/jq` | Another jq to use; it must be jq 1.8.2 or runs fail with a clear message. Without `.tools/jq`, the jq on PATH is tried |
 | `POC_ENGINE__JQ_MAX_RSS_MB` | `12000` | jq is stopped above this |
 | `POC_ENGINE__TRACK_ROWS` | `true` | Build the per-row status table after each run |
 

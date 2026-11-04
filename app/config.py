@@ -4,8 +4,18 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# The jq engine is tested with exactly this version; `make jq` downloads it into .tools/.
+JQ_VERSION = (PROJECT_ROOT / ".jq-version").read_text().strip()
+PINNED_JQ = PROJECT_ROOT / ".tools" / "jq"
+
+
+def default_jq_binary() -> str:
+    """The jq from `make jq`, or whichever jq is on PATH; the jq engine checks its version either way."""
+    return str(PINNED_JQ) if PINNED_JQ.exists() else "jq"
 
 
 class EngineSettings(BaseModel):
@@ -16,7 +26,7 @@ class EngineSettings(BaseModel):
     duckdb_storage: Literal["memory", "disk"] = "memory"
     duckdb_preserve_insertion_order: bool = True
     duckdb_lean: bool = False
-    jq_binary: str = "jq"
+    jq_binary: str = Field(default_factory=default_jq_binary)
     jq_max_rss_mb: int = 12_000
     jq_timeout_seconds: int = 3_600
     monitor_interval_seconds: float = 0.05
