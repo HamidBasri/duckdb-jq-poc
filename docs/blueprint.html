@@ -1,0 +1,1724 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trade Pipeline Blueprint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+/* Layout: an engineering blueprint. Navy title band with the colour key, sticky contents on the left,
+   one figure per claim on the right. Colours carry meaning and repeat everywhere:
+   blue DuckDB, orange jq, cyan files on disk, violet events, plus one dot colour per input table. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #f1f4f8;
+  --zone: #f7f9fb;
+  --ink: #0f1b2b;
+  --ink-2: #3a4757;
+  --ink-3: #687586;
+  --line: #dde3ea;
+  --line-strong: #9fadbd;
+  --brand: #13294a;
+  --on-brand: #ffffff;
+  --on-brand-2: #b6c3d6;
+  --duck: #2a78d6;
+  --duck-soft: #e8f1fc;
+  --jq: #dd5f2b;
+  --jq-soft: #fdeee6;
+  --file: #0e7c86;
+  --file-soft: #e3f4f5;
+  --event: #7c4dcc;
+  --event-soft: #f1ebfb;
+  --panel: #13294a;
+  --panel-soft: #e9eef6;
+  --good: #17784a;
+  --good-soft: #e5f4ec;
+  --warn: #a35f00;
+  --warn-soft: #fbf0de;
+  --bad: #b8392b;
+  --bad-soft: #fbe9e6;
+  --c-trades: #5a67d8;
+  --c-cpty: #2f855a;
+  --c-instr: #b7791f;
+  --c-books: #c2417f;
+  --c-fx: #64748b;
+  --font-body: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0a0f17; --surface: #111925; --surface-2: #172131; --zone: #0e1520;
+    --ink: #e8edf3; --ink-2: #b6c1ce; --ink-3: #8b98a9; --line: #243143; --line-strong: #4a5b71;
+    --brand: #0f1f35; --on-brand: #ffffff; --on-brand-2: #a2b3ca;
+    --duck: #5aa0f0; --duck-soft: #14253b; --jq: #f2804f; --jq-soft: #33201a;
+    --file: #3cc0c9; --file-soft: #0f2a2e; --event: #a985ee; --event-soft: #241a38;
+    --panel: #8fb2e6; --panel-soft: #16233a;
+    --good: #4cc38a; --good-soft: #12291f; --warn: #e0a040; --warn-soft: #2d2213; --bad: #ef7466; --bad-soft: #2e1916;
+    --c-trades: #8e98f0; --c-cpty: #5ec48d; --c-instr: #e2a94a; --c-books: #ec7fb1; --c-fx: #9aa9be;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0a0f17; --surface: #111925; --surface-2: #172131; --zone: #0e1520;
+  --ink: #e8edf3; --ink-2: #b6c1ce; --ink-3: #8b98a9; --line: #243143; --line-strong: #4a5b71;
+  --brand: #0f1f35; --on-brand: #ffffff; --on-brand-2: #a2b3ca;
+  --duck: #5aa0f0; --duck-soft: #14253b; --jq: #f2804f; --jq-soft: #33201a;
+  --file: #3cc0c9; --file-soft: #0f2a2e; --event: #a985ee; --event-soft: #241a38;
+  --panel: #8fb2e6; --panel-soft: #16233a;
+  --good: #4cc38a; --good-soft: #12291f; --warn: #e0a040; --warn-soft: #2d2213; --bad: #ef7466; --bad-soft: #2e1916;
+  --c-trades: #8e98f0; --c-cpty: #5ec48d; --c-instr: #e2a94a; --c-books: #ec7fb1; --c-fx: #9aa9be;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 20px; }
+@media (max-width: 1000px) { html { scroll-padding-top: 68px; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 var(--font-body); overflow-x: clip; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--brand); }
+a { color: var(--duck); text-underline-offset: 2px; }
+code, .mono { font-family: var(--font-mono); font-size: 0.85em; }
+code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--duck); outline-offset: 2px; border-radius: 4px; }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* title band */
+.hero { background: var(--brand); color: var(--on-brand); }
+.hero .inner { max-width: 1320px; margin: 0 auto; padding-block: 40px 30px; display: grid; gap: 14px; }
+.hero .kicker { font: 600 0.74rem/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--on-brand-2); }
+.hero h1 { margin: 0; font-size: clamp(1.9rem, 4vw, 2.8rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; }
+.hero p { margin: 0; color: var(--on-brand-2); max-width: 72ch; font-size: 1.04rem; }
+.key { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 6px; font-size: 0.84rem; color: var(--on-brand-2); }
+.key span { display: inline-flex; align-items: center; gap: 7px; }
+.key i { width: 14px; height: 14px; border-radius: 4px; border: 2px solid; display: inline-block; }
+
+/* layout */
+.layout { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; padding-block: 32px 80px; }
+@media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding-block: 16px 64px; } }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); align-self: start; display: grid; gap: 14px; font-size: 0.9rem; }
+nav.toc h4 { margin: 0 0 4px; font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+nav.toc a { display: block; padding: 4px 10px; border-radius: 6px; color: var(--ink-2); text-decoration: none; }
+nav.toc a:hover { background: var(--surface); color: var(--ink); }
+nav.toc a.on { background: var(--brand); color: var(--on-brand); }
+@media (max-width: 1000px) {
+  nav.toc { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 4; background: var(--bg); display: flex; overflow-x: auto; gap: 4px; padding-block: 8px; scrollbar-width: none; border-bottom: 1px solid var(--line); }
+  nav.toc h4 { display: none; }
+  nav.toc div { display: contents; }
+  nav.toc a { white-space: nowrap; flex: none; }
+}
+main { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 72px; }
+main > section { min-width: 0; }
+
+/* sections */
+section > header { display: grid; gap: 6px; margin-bottom: 18px; max-width: 78ch; }
+.eyebrow { font: 600 0.72rem/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+h2 { margin: 0; font-size: clamp(1.45rem, 2.6vw, 1.9rem); letter-spacing: -0.02em; line-height: 1.15; text-wrap: balance; }
+h3 { margin: 32px 0 10px; font-size: 1.06rem; letter-spacing: -0.005em; }
+.lead { margin: 0; color: var(--ink-2); font-size: 1.02rem; }
+p { max-width: 78ch; }
+
+/* figures */
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.scroll { overflow-x: auto; padding: 18px; }
+figcaption { padding: 12px 18px 14px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 0.9rem; background: var(--surface-2); }
+figcaption b { color: var(--ink); }
+.readme { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; max-width: 80ch; }
+.readme li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; font-size: 0.93rem; color: var(--ink-2); }
+.readme li::before { content: "→"; color: var(--ink-3); }
+
+/* svg diagrams */
+svg.dg { display: block; width: 100%; height: auto; font-family: var(--font-body); }
+.dg text { fill: var(--ink); font-size: 12px; }
+.dg .t { font-weight: 600; font-size: 12.5px; }
+.dg .s { fill: var(--ink-3); font-size: 11px; }
+.dg .m { font-family: var(--font-mono); font-size: 11px; }
+.dg .k { fill: var(--ink-3); font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; }
+.dg .mid { text-anchor: middle; }
+.dg .end { text-anchor: end; }
+.dg .box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+.dg .box2 { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.2; }
+.dg .hdr { fill: var(--surface-2); }
+.dg .zone { fill: var(--zone); stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 5 4; }
+.dg .duck { fill: var(--duck-soft); stroke: var(--duck); stroke-width: 1.3; }
+.dg .jq { fill: var(--jq-soft); stroke: var(--jq); stroke-width: 1.3; }
+.dg .file { fill: var(--file-soft); stroke: var(--file); stroke-width: 1.3; }
+.dg .evt { fill: var(--event-soft); stroke: var(--event); stroke-width: 1.3; }
+.dg .panelbox { fill: var(--panel-soft); stroke: var(--panel); stroke-width: 1.3; }
+.dg .lane-duck { fill: var(--duck-soft); opacity: 0.45; }
+.dg .lane-jq { fill: var(--jq-soft); opacity: 0.55; }
+.dg .lane-file { fill: var(--file-soft); opacity: 0.6; }
+.dg .bus { fill: var(--event); }
+.dg .brandbox { fill: var(--brand); stroke: var(--brand); }
+.dg .on { fill: var(--on-brand); }
+.dg .on2 { fill: var(--on-brand-2); font-size: 11px; }
+.dg .pk { fill: var(--warn); font-size: 9.5px; font-weight: 700; }
+.dg .fk { fill: var(--duck); font-size: 9.5px; font-weight: 700; }
+.dg .edge { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
+.dg .edge.dash { stroke-dasharray: 5 4; }
+.dg .edge.ev { stroke: var(--event); }
+.dg .edge.file { stroke: var(--file); }
+.dg .edge.bad { stroke: var(--bad); }
+.dg .edge.ret { stroke-dasharray: 5 4; stroke: var(--ink-3); }
+.dg .life { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 4; }
+.dg .frame { fill: none; stroke: var(--line-strong); stroke-width: 1.2; }
+.dg .ah { fill: var(--ink-2); }
+.dg .ah-ev { fill: var(--event); }
+.dg .ah-bad { fill: var(--bad); }
+.dg .ah-file { fill: var(--file); }
+.dg .ah-ret { fill: var(--ink-3); }
+.dg .lbl { font-size: 11px; fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.dg .lbl.ev { fill: var(--event); }
+.dg .lbl.bad { fill: var(--bad); font-weight: 600; }
+.dg .st-warn { fill: var(--warn-soft); stroke: var(--warn); stroke-width: 1.3; }
+.dg .st-good { fill: var(--good-soft); stroke: var(--good); stroke-width: 1.3; }
+.dg .st-bad { fill: var(--bad-soft); stroke: var(--bad); stroke-width: 1.3; }
+.dg .st-muted { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.3; }
+.dg .dot-trades { fill: var(--c-trades); } .dg .dot-cpty { fill: var(--c-cpty); } .dg .dot-instr { fill: var(--c-instr); }
+.dg .dot-books { fill: var(--c-books); } .dg .dot-fx { fill: var(--c-fx); }
+.dg .num { fill: var(--event); }
+.dg .numt { fill: var(--surface); font-size: 10.5px; font-weight: 700; text-anchor: middle; }
+
+/* tables */
+.tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); background: var(--surface-2); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td code { white-space: nowrap; }
+td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.04em; color: var(--ink-2); }
+.method { font: 600 0.72rem var(--font-mono); padding: 1px 7px; border-radius: 4px; }
+.method.get { background: var(--file-soft); color: var(--file); }
+.method.post { background: var(--duck-soft); color: var(--duck); }
+.method.delete { background: var(--bad-soft); color: var(--bad); }
+.method.put { background: var(--event-soft); color: var(--event); }
+
+/* one-minute pitch */
+.pitch { margin: 0; padding: 0; list-style: none; counter-reset: p; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 10px; }
+.pitch li { counter-increment: p; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 14px 52px; position: relative; font-size: 0.93rem; color: var(--ink-2); }
+.pitch li::before { content: counter(p); position: absolute; left: 14px; top: 13px; width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: var(--on-brand); font: 700 0.8rem/26px var(--font-body); text-align: center; }
+.pitch li b { display: block; color: var(--ink); font-size: 0.95rem; margin-bottom: 2px; }
+
+/* glossary */
+.gloss { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 14px; }
+.gloss section { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; min-width: 0; }
+.gloss h3 { margin: 0 0 8px; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.gloss dl { margin: 0; display: grid; grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr); gap: 7px 14px; font-size: 0.89rem; }
+.gloss dt { font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.gloss dd { margin: 0; color: var(--ink-2); }
+@media (max-width: 520px) { .gloss dl { grid-template-columns: minmax(0, 1fr); gap: 2px; } .gloss dd { margin-bottom: 8px; } }
+.note { margin: 14px 0 0; padding: 12px 16px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); font-size: 0.9rem; color: var(--ink-2); max-width: none; }
+.note b { color: var(--ink); }
+.tag { display: inline-block; font-size: 0.74rem; padding: 0 7px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); white-space: nowrap; margin: 1px 2px 1px 0; }
+.tag.rej { background: var(--bad-soft); border-color: transparent; color: var(--bad); font-weight: 600; }
+.tag.warn { background: var(--warn-soft); border-color: transparent; color: var(--warn); font-weight: 600; }
+.tag.ok { background: var(--good-soft); border-color: transparent; color: var(--good); font-weight: 600; }
+
+/* output anatomy */
+.anatomy { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .anatomy { grid-template-columns: minmax(0, 1fr); } }
+.doc { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; font-family: var(--font-mono); font-size: 0.8rem; display: grid; gap: 4px; }
+.doc .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 3px 8px; border-radius: 6px; }
+.doc .row:hover { background: var(--surface-2); }
+.doc .k { color: var(--ink); font-weight: 600; }
+.doc .v { color: var(--ink-3); font-weight: 400; }
+.doc .obj { border: 1px solid var(--line); border-radius: 8px; padding: 6px 6px 6px 10px; display: grid; gap: 2px; margin: 4px 0 4px 8px; }
+.doc .obj > .row:first-child { padding-left: 0; }
+.src { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-body); font-size: 0.72rem; color: var(--ink-2); white-space: nowrap; }
+.src i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.src.trades i { background: var(--c-trades); } .src.cpty i { background: var(--c-cpty); } .src.instr i { background: var(--c-instr); }
+.src.books i { background: var(--c-books); } .src.fx i { background: var(--c-fx); } .src.calc i { background: transparent; border: 1.5px solid var(--ink-3); }
+.outs { display: grid; gap: 12px; }
+.out { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; }
+.out h4 { margin: 0; font: 600 0.92rem var(--font-mono); color: var(--file); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.out h4 span { font: 500 0.76rem var(--font-body); color: var(--ink-3); }
+.out p { margin: 0; font-size: 0.88rem; color: var(--ink-2); }
+.out .fields { font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-3); line-height: 1.7; overflow-wrap: anywhere; }
+
+/* tree */
+.tree { margin: 0; padding: 18px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.75; overflow-x: auto; white-space: pre; color: var(--ink); }
+.tree .c { color: var(--ink-3); }
+.tree .d { color: var(--file); font-weight: 600; }
+
+/* screen map */
+.screens { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 12px; }
+.scr { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; }
+.scr h4 { margin: 0; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); display: flex; align-items: center; gap: 8px; }
+.scr h4 i { width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid; }
+.scr ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.scr li { font-size: 0.88rem; color: var(--ink-2); }
+.scr li b { color: var(--ink); }
+.legend-row { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 12px; font-size: 0.84rem; color: var(--ink-2); }
+.legend-row span { display: inline-flex; align-items: center; gap: 7px; }
+.legend-row i { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid; display: inline-block; }
+.sw-tab { background: var(--surface); border-color: var(--line-strong) !important; }
+.sw-panel { background: var(--panel-soft); border-color: var(--panel) !important; }
+.sw-dialog { background: var(--event-soft); border-color: var(--event) !important; }
+.sw-page { background: var(--file-soft); border-color: var(--file) !important; }
+.sw-duck { background: var(--duck-soft); border-color: var(--duck) !important; }
+.sw-jq { background: var(--jq-soft); border-color: var(--jq) !important; }
+.sw-file { background: var(--file-soft); border-color: var(--file) !important; }
+.sw-evt { background: var(--event-soft); border-color: var(--event) !important; }
+.sw-good { background: var(--good-soft); border-color: var(--good) !important; }
+.sw-bad { background: var(--bad-soft); border-color: var(--bad) !important; }
+.key .sw-duck, .key .sw-jq, .key .sw-file, .key .sw-evt { background: transparent; }
+.key .sw-duck { border-color: #6aa9f0 !important; } .key .sw-jq { border-color: #f2804f !important; }
+.key .sw-file { border-color: #3cc0c9 !important; } .key .sw-evt { border-color: #a985ee !important; }
+</style>
+
+<header class="hero">
+  <div class="inner gutter">
+    <span class="kicker">duckdb-jq-poc · visual documentation</span>
+    <h1>Trade Pipeline Blueprint</h1>
+    <p>Every part of the project in pictures and plain words: the data, the pipeline, the rules you can change, the code and its services, and the dashboard. Start with "In one minute" to explain the project to someone else; end with the glossary for any word you're unsure of. Each figure makes one point, and its caption says which.</p>
+    <div class="key" aria-label="Colour key">
+      <span><i class="sw-duck"></i>DuckDB</span>
+      <span><i class="sw-jq"></i>jq</span>
+      <span><i class="sw-file"></i>files on disk</span>
+      <span><i class="sw-evt"></i>events</span>
+      <span>Arrows always carry a label: read the label, not just the line.</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout gutter">
+  <nav class="toc" aria-label="Contents">
+    <div><h4>Start</h4>
+      <a href="#minute">In one minute</a>
+      <a href="#system">System at a glance</a></div>
+    <div><h4>Data</h4>
+      <a href="#inputs">Input tables</a>
+      <a href="#mess">Mess on purpose</a>
+      <a href="#outputs">What comes out</a>
+      <a href="#versions">Versions and edits</a>
+      <a href="#records">App records and files</a></div>
+    <div><h4>Behaviour</h4>
+      <a href="#statuses">Statuses</a>
+      <a href="#pipeline">Pipeline, step by step</a>
+      <a href="#rules">Validation rules</a>
+      <a href="#changing">Rules you can change</a>
+      <a href="#sequence">One run, start to finish</a></div>
+    <div><h4>Code</h4>
+      <a href="#layers">Code layers</a>
+      <a href="#services">Every service</a>
+      <a href="#events">Processes and events</a></div>
+    <div><h4>Using it</h4>
+      <a href="#screens">Dashboard screens</a>
+      <a href="#flows">Dashboard flows</a>
+      <a href="#api">API map</a>
+      <a href="#commands">Commands and settings</a></div>
+    <div><h4>Words</h4>
+      <a href="#glossary">Glossary</a></div>
+  </nav>
+
+  <main>
+
+<!-- ============ ONE MINUTE ============ -->
+<section id="minute">
+  <header>
+    <span class="eyebrow">Start</span>
+    <h2>The whole project in one minute</h2>
+    <p class="lead">Eight sentences you can say out loud, in this order. Each one is explained further down the page.</p>
+  </header>
+  <ol class="pitch">
+    <li><b>The question</b>Which tool is better at turning big tables of trade data into clean, nested JSON: DuckDB, a SQL database that runs inside the app, or jq, a command-line tool for JSON?</li>
+    <li><b>The data</b>Five linked tables: trades, counterparties, instruments, books and FX rates. A generator makes them with mess added on purpose, or you upload your own CSV or Parquet files.</li>
+    <li><b>The work</b>Both tools run the same five stages: ingest, clean, validate, transform and aggregate.</li>
+    <li><b>The result</b>Each valid trade becomes one nested JSON document. Bad trades go to a rejects file with every reason. Money at risk is added up per parent company.</li>
+    <li><b>The proof</b>A checker compares the two tools' output document by document. Every run so far matched.</li>
+    <li><b>The answer</b>DuckDB was 7 to 40 times faster, from 5 thousand to 1 million trades. jq used less memory by default.</li>
+    <li><b>The app</b>A dashboard to create datasets, run one or both tools, benchmark sizes, read the raw and output data, fix values as new versions, and set rules that later runs follow.</li>
+    <li><b>The design</b>A request is answered at once. Heavy work runs in separate worker processes. Everything that happens is announced as an event, so the page updates live.</li>
+  </ol>
+</section>
+
+<!-- ============ SYSTEM ============ -->
+<section id="system">
+  <header>
+    <span class="eyebrow">Start</span>
+    <h2>System at a glance</h2>
+    <p class="lead">One app process answers requests and coordinates. Heavy work runs in separate worker processes. Everything ends up as files under <code>data/</code>.</p>
+  </header>
+  <figure>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1000 520" style="min-width:820px" role="img" aria-label="The browser talks HTTP to the app process and receives live events. Inside the app process, services announce events on an event bus; the projector saves records, the live stream pushes to browsers, orchestrators submit jobs to worker processes. Workers send events back through a queue and read and write files under data.">
+      <defs>
+        <marker id="s1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="s1e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-ev" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="s1f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-file" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <!-- you -->
+      <rect class="box" x="20" y="56" width="180" height="112" rx="8"/>
+      <text class="t" x="34" y="80">Browser</text>
+      <text class="m" x="34" y="104">/  dashboard</text>
+      <text class="m" x="34" y="124">/tracker  row tracker</text>
+      <text class="m" x="34" y="144">/docs  API reference</text>
+      <rect class="box" x="20" y="290" width="180" height="84" rx="8"/>
+      <text class="t" x="34" y="314">Terminal</text>
+      <text class="m" x="34" y="338">make benchmark</text>
+      <text class="m" x="34" y="358">python -m app.cli</text>
+
+      <!-- app process -->
+      <rect class="zone" x="250" y="20" width="370" height="390" rx="10"/>
+      <text class="k" x="266" y="40">APP PROCESS · ONE EVENT LOOP</text>
+      <rect class="box" x="270" y="52" width="330" height="44" rx="7"/>
+      <text class="t" x="286" y="72">HTTP API</text><text class="s" x="286" y="88">FastAPI routes in app/api/routes</text>
+      <rect class="box" x="270" y="116" width="155" height="56" rx="7"/>
+      <text class="t" x="286" y="138">Live stream</text><text class="s" x="286" y="156">events → open pages</text>
+      <rect class="box" x="445" y="116" width="155" height="56" rx="7"/>
+      <text class="t" x="461" y="138">Services</text><text class="s" x="461" y="156">check, save, announce</text>
+      <rect class="bus" x="270" y="192" width="330" height="32" rx="6"/>
+      <text class="t on mid" x="435" y="213">EVENT BUS</text>
+      <rect class="box" x="270" y="244" width="155" height="56" rx="7"/>
+      <text class="t" x="286" y="266">State projector</text><text class="s" x="286" y="284">events → JSON records</text>
+      <rect class="box" x="445" y="244" width="155" height="56" rx="7"/>
+      <text class="t" x="461" y="266">Orchestrators</text><text class="s" x="461" y="284">start jobs, report back</text>
+      <rect class="evt" x="445" y="320" width="155" height="56" rx="7"/>
+      <text class="t" x="461" y="342">Worker bridge</text><text class="s" x="461" y="360">reads the worker queue</text>
+      <path class="edge" d="M522 96V114" marker-end="url(#s1a)"/>
+      <path class="edge ev" d="M522 172V190" marker-end="url(#s1e)"/>
+      <path class="edge ev" d="M347 192V174" marker-end="url(#s1e)"/>
+      <path class="edge ev" d="M347 224V242" marker-end="url(#s1e)"/>
+      <path class="edge ev" d="M522 224V242" marker-end="url(#s1e)"/>
+      <path class="edge ev" d="M445 348H435V227" marker-end="url(#s1e)"/>
+      <text class="lbl" x="530" y="108">calls</text>
+      <text class="lbl ev" x="530" y="186">announce</text>
+
+      <!-- browser and terminal links -->
+      <path class="edge" d="M200 74H268" marker-end="url(#s1a)"/>
+      <text class="lbl mid" x="234" y="68">HTTP</text>
+      <path class="edge ev" d="M270 144H202" marker-end="url(#s1e)"/>
+      <text class="lbl ev mid" x="234" y="138">SSE</text>
+      <path class="edge" d="M200 330H248" marker-end="url(#s1a)"/>
+      <text class="lbl mid" x="224" y="322">in-process</text>
+
+      <!-- workers -->
+      <rect class="zone" x="660" y="20" width="330" height="356" rx="10"/>
+      <text class="k" x="676" y="40">WORKER PROCESSES · 2 AT A TIME · FRESH PER JOB</text>
+      <rect class="box" x="680" y="52" width="290" height="44" rx="7"/>
+      <text class="t" x="696" y="72">Dataset generator</text><text class="s" x="696" y="88">seeded synthetic trades, CSV + Parquet</text>
+      <rect class="box" x="680" y="104" width="290" height="44" rx="7"/>
+      <text class="t" x="696" y="124">Upload check · new versions</text><text class="s" x="696" y="140">checks columns; writes fixed copies</text>
+      <rect class="box" x="680" y="156" width="200" height="96" rx="7"/>
+      <text class="t" x="696" y="178">Pipeline runner</text><text class="s" x="696" y="194">times the 5 stages</text>
+      <rect class="duck" x="692" y="206" width="84" height="26" rx="5"/><text class="t mid" x="734" y="223">DuckDB</text>
+      <rect class="jq" x="784" y="206" width="84" height="26" rx="5"/><text class="t mid" x="826" y="223">jq engine</text>
+      <text class="s" x="696" y="246">then the row tracker</text>
+      <rect class="box2" x="890" y="198" width="80" height="44" rx="7"/>
+      <text class="t mid" x="930" y="217">jq</text><text class="s mid" x="930" y="232">subprocess</text>
+      <path class="edge" d="M868 219H888" marker-end="url(#s1a)"/>
+      <rect class="box" x="680" y="262" width="290" height="44" rx="7"/>
+      <text class="t" x="696" y="282">Output checker</text><text class="s" x="696" y="298">DuckDB vs jq, document by document</text>
+
+      <path class="edge" d="M600 272H658" marker-end="url(#s1a)"/>
+      <text class="lbl mid" x="629" y="264">jobs</text>
+      <path class="edge ev dash" d="M660 350H602" marker-end="url(#s1e)"/>
+      <text class="lbl ev mid" x="631" y="342">queue</text>
+
+      <!-- disk -->
+      <rect class="file" x="250" y="440" width="740" height="66" rx="10"/>
+      <text class="t" x="266" y="466">data/</text><text class="s" x="266" y="484">on disk</text>
+      <text class="m" x="370" y="466">datasets/</text><text class="s" x="370" y="484">inputs and versions</text>
+      <text class="m" x="530" y="466">runs/</text><text class="s" x="530" y="484">outputs per run</text>
+      <text class="m" x="680" y="466">state/</text><text class="s" x="680" y="484">records and rules</text>
+      <text class="m" x="830" y="466">reports/</text><text class="s" x="830" y="484">benchmark tables</text>
+      <path class="edge file" d="M347 300V438" marker-end="url(#s1f)"/>
+      <text class="lbl" x="355" y="424">saves records</text>
+      <path class="edge file" d="M760 376V438" marker-end="url(#s1f)"/>
+      <text class="lbl" x="768" y="424">reads inputs, writes outputs</text>
+      <path class="edge file" d="M110 374V472H248" marker-end="url(#s1f)"/>
+      <text class="lbl mid" x="180" y="466">reports</text>
+    </svg></div>
+    <figcaption><b>Requests never do heavy work.</b> A request is checked, saved and announced on the event bus, then answered straight away. Orchestrators hear the announcement and hand the job to a worker process. Workers report progress back through a queue, and the live stream (SSE) pushes every event to open pages. Reading one page of data (the Data tab, the trade tracker) is quick, so the app process does that itself with DuckDB, on a background thread. The terminal builds the same app core in its own process, without HTTP.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ INPUTS ============ -->
+<section id="inputs">
+  <header>
+    <span class="eyebrow">Data</span>
+    <h2>Input tables and how they link</h2>
+    <p class="lead">Five tables arrive as CSV or Parquet. Trades sits in the middle and points at the other four. Three tables also point at themselves, which is what makes this data hard to process.</p>
+  </header>
+  <figure>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1010 540" style="min-width:860px" role="img" aria-label="Entity relationship diagram. Trades references counterparties, instruments, books and fx_rates, and its own earlier versions. Counterparties reference their parent company. Instruments reference an issuer counterparty, a currency and an underlying instrument.">
+      <defs>
+        <marker id="s2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <!-- counterparties -->
+      <rect class="box" x="30" y="40" width="230" height="178" rx="7"/>
+      <path class="hdr" d="M31 47a6 6 0 0 1 6-6h216a6 6 0 0 1 6 6v23H31z"/>
+      <circle class="dot-cpty" cx="44" cy="56" r="5"/>
+      <text class="t" x="56" y="60">counterparties</text><text class="s end" x="248" y="60">companies</text>
+      <text class="pk" x="40" y="84">PK</text><text class="m" x="64" y="84">counterparty_id</text>
+      <text class="m" x="64" y="104">legal_name</text>
+      <text class="m" x="64" y="124">lei</text>
+      <text class="m" x="64" y="144">country</text>
+      <text class="m" x="64" y="164">sector</text>
+      <text class="m" x="64" y="184">credit_rating</text>
+      <text class="fk" x="40" y="204">FK</text><text class="m" x="64" y="204">parent_counterparty_id</text>
+
+      <!-- trades -->
+      <rect class="box" x="385" y="40" width="230" height="278" rx="7"/>
+      <path class="hdr" d="M386 47a6 6 0 0 1 6-6h216a6 6 0 0 1 6 6v23H386z"/>
+      <circle class="dot-trades" cx="399" cy="56" r="5"/>
+      <text class="t" x="411" y="60">trades</text><text class="s end" x="603" y="60">one row per event</text>
+      <text class="pk" x="395" y="84">PK</text><text class="m" x="419" y="84">trade_id</text>
+      <text class="fk" x="395" y="104">FK</text><text class="m" x="419" y="104">previous_trade_id</text>
+      <text class="m" x="419" y="124">event_type</text>
+      <text class="m" x="419" y="144">trade_date</text>
+      <text class="m" x="419" y="164">settlement_date</text>
+      <text class="fk" x="395" y="184">FK</text><text class="m" x="419" y="184">instrument_id</text>
+      <text class="fk" x="395" y="204">FK</text><text class="m" x="419" y="204">counterparty_id</text>
+      <text class="fk" x="395" y="224">FK</text><text class="m" x="419" y="224">book_id</text>
+      <text class="m" x="419" y="244">side</text>
+      <text class="m" x="419" y="264">quantity</text>
+      <text class="m" x="419" y="284">price</text>
+      <text class="fk" x="395" y="304">FK</text><text class="m" x="419" y="304">currency</text>
+
+      <!-- instruments -->
+      <rect class="box" x="740" y="40" width="230" height="178" rx="7"/>
+      <path class="hdr" d="M741 47a6 6 0 0 1 6-6h216a6 6 0 0 1 6 6v23H741z"/>
+      <circle class="dot-instr" cx="754" cy="56" r="5"/>
+      <text class="t" x="766" y="60">instruments</text><text class="s end" x="958" y="60">what was traded</text>
+      <text class="pk" x="750" y="84">PK</text><text class="m" x="774" y="84">instrument_id</text>
+      <text class="m" x="774" y="104">isin</text>
+      <text class="m" x="774" y="124">instrument_type</text>
+      <text class="fk" x="750" y="144">FK</text><text class="m" x="774" y="144">currency</text>
+      <text class="fk" x="750" y="164">FK</text><text class="m" x="774" y="164">issuer_counterparty_id</text>
+      <text class="fk" x="750" y="184">FK</text><text class="m" x="774" y="184">underlying_instrument_id</text>
+      <text class="m" x="774" y="204">maturity_date</text>
+
+      <!-- books -->
+      <rect class="box" x="30" y="400" width="230" height="118" rx="7"/>
+      <path class="hdr" d="M31 407a6 6 0 0 1 6-6h216a6 6 0 0 1 6 6v23H31z"/>
+      <circle class="dot-books" cx="44" cy="416" r="5"/>
+      <text class="t" x="56" y="420">books</text><text class="s end" x="248" y="420">desks and traders</text>
+      <text class="pk" x="40" y="444">PK</text><text class="m" x="64" y="444">book_id</text>
+      <text class="m" x="64" y="464">desk</text>
+      <text class="m" x="64" y="484">trader</text>
+      <text class="m" x="64" y="504">region</text>
+
+      <!-- fx -->
+      <rect class="box" x="740" y="420" width="230" height="78" rx="7"/>
+      <path class="hdr" d="M741 427a6 6 0 0 1 6-6h216a6 6 0 0 1 6 6v23H741z"/>
+      <circle class="dot-fx" cx="754" cy="436" r="5"/>
+      <text class="t" x="766" y="440">fx_rates</text><text class="s end" x="958" y="440">to US dollars</text>
+      <text class="pk" x="750" y="464">PK</text><text class="m" x="774" y="464">currency</text>
+      <text class="m" x="774" y="484">rate_to_usd</text>
+
+      <!-- links -->
+      <path class="edge" d="M385 200H325V80H262" marker-end="url(#s2a)"/>
+      <path class="edge" d="M385 220H345V440H262" marker-end="url(#s2a)"/>
+      <path class="edge" d="M615 180H700V80H738" marker-end="url(#s2a)"/>
+      <path class="edge" d="M615 300H690V460H738" marker-end="url(#s2a)"/>
+      <path class="edge" d="M615 100H648V80H617" marker-end="url(#s2a)"/>
+      <text class="lbl" x="653" y="95">amends</text>
+      <path class="edge" d="M30 200H16V80H28" marker-end="url(#s2a)"/>
+      <text class="lbl mid" transform="rotate(-90 9 140)" x="9" y="140">parent</text>
+      <path class="edge" d="M970 180H988V80H972" marker-end="url(#s2a)"/>
+      <text class="lbl mid" transform="rotate(-90 999 130)" x="999" y="130">underlying</text>
+      <path class="edge" d="M820 40V22H210V38" marker-end="url(#s2a)"/>
+      <text class="lbl mid" x="515" y="16">issuer_counterparty_id</text>
+      <path class="edge" d="M855 218V418" marker-end="url(#s2a)"/>
+      <text class="lbl" x="863" y="322">currency</text>
+
+      <!-- self links by example -->
+      <text class="k" x="380" y="356">SELF LINKS, BY EXAMPLE</text>
+      <rect class="box2" x="380" y="368" width="82" height="26" rx="5"/><text class="m mid" x="421" y="385">TR01 NEW</text>
+      <rect class="box2" x="482" y="368" width="88" height="26" rx="5"/><text class="m mid" x="526" y="385">TR02 AMEND</text>
+      <rect class="box2" x="590" y="368" width="82" height="26" rx="5"/><text class="m mid" x="631" y="385">TR03 CANCEL</text>
+      <path class="edge" d="M482 381H464" marker-end="url(#s2a)"/>
+      <path class="edge" d="M590 381H572" marker-end="url(#s2a)"/>
+      <text class="s" x="380" y="412">one trade's versions: each points at the one before</text>
+      <rect class="box2" x="380" y="430" width="82" height="26" rx="5"/><text class="m mid" x="421" y="447">CPA</text>
+      <rect class="box2" x="482" y="430" width="88" height="26" rx="5"/><text class="m mid" x="526" y="447">CPB</text>
+      <rect class="box2" x="590" y="430" width="82" height="26" rx="5"/><text class="m mid" x="631" y="447">CPC</text>
+      <path class="edge" d="M482 443H464" marker-end="url(#s2a)"/>
+      <path class="edge" d="M590 443H572" marker-end="url(#s2a)"/>
+      <text class="s" x="380" y="474">company tree: CPA is the ultimate parent of CPC</text>
+      <text class="s" x="380" y="496">trees can loop (A → B → A) and point at missing</text>
+      <text class="s" x="380" y="512">companies; both are caught and flagged</text>
+    </svg></div>
+    <figcaption><b>Arrows run from a foreign key (FK) to the key it points at (PK), and every link is many to one.</b> Following the self links is the hard part. A trade's versions form a chain of up to 5 by default (setting: amendment chain). A company tree is 7 levels deep by default (setting: company tree depth) and can contain loops. Every column arrives as text; the clean stage turns it into dates and numbers.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ MESS ============ -->
+<section id="mess">
+  <header>
+    <span class="eyebrow">Data</span>
+    <h2>Mess added on purpose</h2>
+    <p class="lead">The generator spoils a share of rows (2% by default, setting: messy rows) in specific ways. Each kind of mess has one place where it is caught and one outcome. Reading across a row tells you where to look when a trade goes missing.</p>
+  </header>
+  <div class="tw"><table>
+    <thead><tr><th>Kind of mess</th><th>Example</th><th>Caught in</th><th>Outcome</th></tr></thead>
+    <tbody>
+      <tr><td class="grp" colspan="4">Harmless: cleaned and kept</td></tr>
+      <tr><td>Different spellings of side</td><td><code>b</code>, <code>Buy</code>, <code>S</code></td><td>clean</td><td><span class="tag ok">normalised</span> to BUY or SELL</td></tr>
+      <tr><td>Lower-case codes</td><td><code>usd</code>, <code>amend</code></td><td>clean</td><td><span class="tag ok">normalised</span></td></tr>
+      <tr><td>Day-first dates</td><td><code>10/01/2025</code></td><td>clean</td><td><span class="tag ok">parsed</span></td></tr>
+      <tr><td>Thousands separators</td><td><code>1,250</code></td><td>clean</td><td><span class="tag ok">parsed</span></td></tr>
+      <tr><td>Exact duplicate rows</td><td>same trade twice</td><td>clean</td><td><span class="tag">duplicate</span> first copy kept</td></tr>
+      <tr><td>Missing currency</td><td>empty</td><td>clean</td><td><span class="tag warn">warning</span> taken from the instrument</td></tr>
+      <tr><td>Missing settlement date</td><td>empty</td><td>clean</td><td><span class="tag warn">warning</span> trade date + 2 days</td></tr>
+      <tr><td>Company tree loops</td><td>A → B → A</td><td>transform</td><td><span class="tag warn">warning</span> walk stops safely</td></tr>
+      <tr><td>Parent company missing</td><td>points at nobody</td><td>transform</td><td><span class="tag warn">warning</span> tree ends there</td></tr>
+      <tr><td>Amendment before its original</td><td>v2 earlier in the file</td><td>transform</td><td><span class="tag ok">handled</span> order comes from links, not file order</td></tr>
+      <tr><td class="grp" colspan="4">Real problems: the trade is rejected</td></tr>
+      <tr><td>Settlement before trade date</td><td>trade 5 Mar, settles 2 Mar</td><td>validate</td><td><span class="tag rej">reject</span></td></tr>
+      <tr><td>Negative price</td><td><code>-10.5</code></td><td>validate</td><td><span class="tag rej">reject</span></td></tr>
+      <tr><td>Impossible date</td><td><code>2025-02-30</code></td><td>validate</td><td><span class="tag rej">reject</span></td></tr>
+      <tr><td>Unknown currency</td><td><code>XXX</code></td><td>validate</td><td><span class="tag rej">reject</span></td></tr>
+      <tr><td>Bad side or quantity</td><td><code>HOLD</code>, <code>N/A</code>, <code>0</code></td><td>validate</td><td><span class="tag rej">reject</span></td></tr>
+      <tr><td>Link to a missing row</td><td>unknown counterparty, instrument, book or earlier version</td><td>validate</td><td><span class="tag rej">reject</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ OUTPUTS ============ -->
+<section id="outputs">
+  <header>
+    <span class="eyebrow">Data</span>
+    <h2>What comes out</h2>
+    <p class="lead">Every valid trade becomes one nested JSON document. The coloured dots show which input table each part comes from, so you can see the joins and the tree walks at a glance.</p>
+  </header>
+  <div class="anatomy">
+    <div class="doc" role="figure" aria-label="Structure of one output trade document with the source table of each field group">
+      <div class="row"><span class="k">trade_id · event_type · trade_date · settlement_date · side</span><span class="src trades"><i></i>trades</span></div>
+      <div class="obj">
+        <div class="row"><span class="k">economics <span class="v">{ }</span></span><span><span class="src trades"><i></i>trades</span> <span class="src fx"><i></i>fx_rates</span></span></div>
+        <div class="row"><span class="v">quantity · price · currency</span><span class="src trades"><i></i>trades</span></div>
+        <div class="row"><span class="v">notional = quantity × price</span><span class="src calc"><i></i>calculated</span></div>
+        <div class="row"><span class="v">fx_rate_to_usd · notional_usd</span><span class="src fx"><i></i>fx_rates</span></div>
+      </div>
+      <div class="obj">
+        <div class="row"><span class="k">instrument <span class="v">{ }</span></span><span class="src instr"><i></i>instruments</span></div>
+        <div class="row"><span class="v">instrument_id · isin · instrument_type · currency · maturity_date</span><span class="src instr"><i></i>instruments</span></div>
+        <div class="row"><span class="v">issuer { counterparty_id · legal_name · lei }</span><span class="src cpty"><i></i>counterparties</span></div>
+        <div class="row"><span class="v">underlying { the instrument it is based on }</span><span class="src instr"><i></i>instruments</span></div>
+      </div>
+      <div class="obj">
+        <div class="row"><span class="k">counterparty <span class="v">{ }</span></span><span class="src cpty"><i></i>counterparties</span></div>
+        <div class="row"><span class="v">counterparty_id · legal_name · lei · country · sector · credit_rating</span><span class="src cpty"><i></i>counterparties</span></div>
+        <div class="row"><span class="v">ultimate_parent { id · name } · hierarchy_depth · hierarchy_path [ ]</span><span class="src calc"><i></i>tree walk</span></div>
+        <div class="row"><span class="v">parent { … parent { … parent: null } }</span><span class="src calc"><i></i>tree walk</span></div>
+      </div>
+      <div class="obj">
+        <div class="row"><span class="k">book <span class="v">{ book_id · desk · trader · region }</span></span><span class="src books"><i></i>books</span></div>
+      </div>
+      <div class="obj">
+        <div class="row"><span class="k">lineage <span class="v">{ }</span></span><span class="src trades"><i></i>trades chain</span></div>
+        <div class="row"><span class="v">root_trade_id · version · chain [ ] · previous_trade_id</span><span class="src calc"><i></i>chain walk</span></div>
+        <div class="row"><span class="v">superseded_by · is_latest</span><span class="src calc"><i></i>chain walk</span></div>
+      </div>
+      <div class="obj">
+        <div class="row"><span class="k">data_quality <span class="v">{ warnings [ ] }</span></span><span class="src calc"><i></i>clean + transform</span></div>
+      </div>
+    </div>
+    <div class="outs">
+      <div class="out"><h4>trades.ndjson <span>one per valid trade</span></h4>
+        <p>The nested document on the left. Run filters (dates, instrument types, size, latest only) decide which valid trades are written.</p></div>
+      <div class="out"><h4>rejects.ndjson <span>one per rejected trade</span></h4>
+        <p>Why each trade was rejected, with the cleaned record so you can see the bad value.</p>
+        <div class="fields">trade_id · errors [codes] · warnings [codes] · record { cleaned fields }</div></div>
+      <div class="out"><h4>exposures.ndjson <span>one per parent company</span></h4>
+        <p>Money at risk per ultimate parent, counting only the latest version of each trade and skipping cancellations.</p>
+        <div class="fields">ultimate_parent_id · name · trade_count · gross_notional_usd · net_notional_usd · by_currency [ ] · by_counterparty [ ]</div></div>
+      <div class="out"><h4>quality_report.json <span>one per run</span></h4>
+        <p>The row counts at each step. It must be identical for DuckDB and jq.</p>
+        <div class="fields">raw_rows · duplicates_removed · clean_rows · valid_rows · rejected_rows · error_counts { } · warning_counts { } · output_rows · exposure_groups</div></div>
+      <div class="out"><h4>row_status.parquet <span>one per input row</span></h4>
+        <p>Where every input row ended up. The trade tracker page reads this file.</p>
+        <div class="fields">source_row · trade_id · state · stopped_at · duplicate_of_row · errors · warnings · version · is_latest · in_exposure · exposure_group · output_offset</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VERSIONS ============ -->
+<section id="versions">
+  <header>
+    <span class="eyebrow">Data</span>
+    <h2>Versions and edits</h2>
+    <p class="lead">You never change a dataset's files. To fix something, you save a new version: a full copy with the fix applied. The original stays exactly as it was, so you can always go back and compare.</p>
+  </header>
+  <figure>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1000 400" style="min-width:860px" role="img" aria-label="A dataset family. The original upload is version 1. Fix columns makes version 2 with renamed columns. Editing version 2 in the Data tab makes version 3 with one changed value and one removed row. Below, the steps that build a version: the service checks and saves it as pending, an event starts a worker job that writes Parquet files, then the same check as an upload marks it ready.">
+      <defs>
+        <marker id="s11a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="s11e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-ev" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <text class="k" x="20" y="24">ONE DATASET FAMILY</text>
+      <!-- v1 -->
+      <rect class="box" x="20" y="36" width="270" height="140" rx="8"/>
+      <text class="t" x="36" y="60">upload-…-0d67a4</text><text class="s end" x="276" y="60">v1 · the original</text>
+      <text class="s" x="36" y="84">origin: uploaded</text>
+      <text class="s" x="36" y="102">your files, kept as they arrived</text>
+      <rect class="file" x="36" y="118" width="238" height="44" rx="6"/>
+      <text class="m" x="48" y="137">trades.csv</text>
+      <text class="m" x="48" y="153">column: <tspan font-weight="600">Qty</tspan></text>
+
+      <!-- v2 -->
+      <rect class="box" x="365" y="36" width="270" height="140" rx="8"/>
+      <text class="t" x="381" y="60">upload-…-0d67a4-v2</text><text class="s end" x="621" y="60">v2</text>
+      <text class="s" x="381" y="84">parent: v1 · root: v1</text>
+      <text class="s" x="381" y="102">column_mapping: Qty → quantity</text>
+      <rect class="file" x="381" y="118" width="238" height="44" rx="6"/>
+      <text class="m" x="393" y="137">trades.parquet</text>
+      <text class="m" x="393" y="153">column: <tspan font-weight="600">quantity</tspan></text>
+
+      <!-- v3 -->
+      <rect class="box" x="710" y="36" width="270" height="140" rx="8"/>
+      <text class="t" x="726" y="60">upload-…-0d67a4-v3</text><text class="s end" x="966" y="60">v3</text>
+      <text class="s" x="726" y="84">parent: v2 · root: v1</text>
+      <text class="s" x="726" y="102">edits: row 17 side HOLD → BUY</text>
+      <rect class="file" x="726" y="118" width="238" height="44" rx="6"/>
+      <text class="m" x="738" y="137">trades.parquet</text>
+      <text class="m" x="738" y="153">deleted_rows: row 1</text>
+
+      <path class="edge" d="M290 106H363" marker-end="url(#s11a)"/><text class="lbl mid" x="327" y="98">Fix columns</text>
+      <path class="edge" d="M635 106H708" marker-end="url(#s11a)"/><text class="lbl mid" x="672" y="98">Save as v3</text>
+
+      <!-- how a version is built -->
+      <text class="k" x="20" y="226">HOW A VERSION IS BUILT</text>
+      <rect class="box" x="20" y="238" width="170" height="78" rx="8"/>
+      <text class="t" x="34" y="260">1 · DatasetService</text><text class="s" x="34" y="278">checks the columns</text><text class="s" x="34" y="294">and rows exist; saves</text><text class="s" x="34" y="308">the new record as pending</text>
+      <rect class="evt" x="222" y="238" width="170" height="78" rx="8"/>
+      <text class="t" x="236" y="260">2 · Event</text><text class="m" x="236" y="280">DatasetVersion</text><text class="m" x="236" y="296">Requested</text>
+      <rect class="box" x="424" y="238" width="170" height="78" rx="8"/>
+      <text class="t" x="436" y="260">3 · Orchestrator</text><text class="s" x="436" y="278">Dataset orchestrator</text><text class="s" x="436" y="294">sends the job to a</text><text class="s" x="436" y="308">worker process</text>
+      <rect class="duck" x="626" y="238" width="170" height="78" rx="8"/>
+      <text class="t" x="638" y="260">4 · derive_dataset</text><text class="s" x="638" y="278">DuckDB copies the parent:</text><text class="s" x="638" y="294">renames, changes values,</text><text class="s" x="638" y="308">drops rows → Parquet</text>
+      <rect class="st-good" x="828" y="238" width="152" height="78" rx="8"/>
+      <text class="t" x="840" y="260">5 · Upload check</text><text class="s" x="840" y="278">same as for an upload,</text><text class="s" x="840" y="294">then DatasetReady or</text><text class="s" x="840" y="308">DatasetFailed</text>
+      <path class="edge ev" d="M190 277H220" marker-end="url(#s11e)"/>
+      <path class="edge ev" d="M392 277H422" marker-end="url(#s11e)"/>
+      <path class="edge" d="M594 277H624" marker-end="url(#s11a)"/>
+      <path class="edge" d="M796 277H826" marker-end="url(#s11a)"/>
+      <text class="s" x="20" y="350">The request returns straight away with the new record (status pending); the Datasets tab shows it nested under its family and flips it to Ready when step 5 passes.</text>
+      <text class="s" x="20" y="370">A version's id is the family's first id plus "-v" and the next free number, so a new version made from v2 while v3 exists becomes v4.</text>
+    </svg></div>
+    <figcaption><b>Two ways to make a version, one way to build it.</b> "Fix columns" renames your columns to the expected names (and drops columns nobody needs). Edits in the Data tab change single values and remove whole rows, and keep every column. Either way a worker writes a new Parquet copy from the parent, row order kept, and checks it like an upload.</figcaption>
+  </figure>
+  <ul class="readme">
+    <li><span>Edits point at row numbers in the file you edited (the parent). Row 1 is the first data row, not the header.</span></li>
+    <li><span>A version of a version carries everything before it: v3 above has the renamed columns from v2 plus its own edits.</span></li>
+    <li><span>Deleting a dataset deletes only that one. Versions made from it are full copies, so they keep working. Finished runs on it are kept too.</span></li>
+    <li><span>Fix columns is offered on uploads and their versions. Edits work on any dataset that has files, generated ones included.</span></li>
+    <li><span>An edit fixes one value in one dataset. To fix the same value everywhere, turn it into a correction rule (see <a href="#changing">Rules you can change</a>).</span></li>
+  </ul>
+</section>
+
+<!-- ============ RECORDS ============ -->
+<section id="records">
+  <header>
+    <span class="eyebrow">Data</span>
+    <h2>App records and where they live</h2>
+    <p class="lead">Besides the trade data, the app keeps its own records: what was made, what was run, how it went, and which rules were in force. They are plain JSON files, and these are their links.</p>
+  </header>
+  <figure>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1000 550" style="min-width:820px" role="img" aria-label="App records. A comparison runs on one dataset and has one or two pipeline runs. Each run holds five stage metrics and a full copy of the rule set it used. A comparison can belong to a benchmark, which creates or reuses one dataset per size. A dataset can be a version of another dataset.">
+      <defs>
+        <marker id="s4a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <!-- dataset -->
+      <rect class="box" x="30" y="40" width="260" height="278" rx="7"/>
+      <path class="hdr" d="M31 47a6 6 0 0 1 6-6h246a6 6 0 0 1 6 6v23H31z"/>
+      <text class="t" x="42" y="60">Dataset</text><text class="s end" x="278" y="60">manifest.json</text>
+      <text class="pk" x="40" y="84">PK</text><text class="m" x="64" y="84">dataset_id</text><text class="s end" x="278" y="84">examples below</text>
+      <text class="m" x="64" y="104">origin</text><text class="s end" x="278" y="104">generated · uploaded · version</text>
+      <text class="m" x="64" y="124">status</text><text class="s end" x="278" y="124">pending · ready · failed</text>
+      <text class="m" x="64" y="144">generation</text><text class="s end" x="278" y="144">size + settings</text>
+      <text class="m" x="64" y="164">files</text><text class="s end" x="278" y="164">one per table</text>
+      <text class="m" x="64" y="184">row_counts</text><text class="s end" x="278" y="184">rows per table</text>
+      <text class="m" x="64" y="204">version</text><text class="s end" x="278" y="204">1 for an original</text>
+      <text class="fk" x="40" y="224">FK</text><text class="m" x="64" y="224">parent_id</text><text class="s end" x="278" y="224">made from</text>
+      <text class="fk" x="40" y="244">FK</text><text class="m" x="64" y="244">root_id</text><text class="s end" x="278" y="244">first of the family</text>
+      <text class="m" x="64" y="264">column_mapping</text><text class="s end" x="278" y="264">from Fix columns</text>
+      <text class="m" x="64" y="284">edits</text><text class="s end" x="278" y="284">changed values</text>
+      <text class="m" x="64" y="304">deleted_rows</text><text class="s end" x="278" y="304">removed rows</text>
+
+      <!-- rule set -->
+      <rect class="box" x="30" y="370" width="260" height="138" rx="7"/>
+      <path class="hdr" d="M31 377a6 6 0 0 1 6-6h246a6 6 0 0 1 6 6v23H31z"/>
+      <text class="t" x="42" y="390">Rule set</text><text class="s end" x="278" y="390">state/rules/{version}.json</text>
+      <text class="pk" x="40" y="414">PK</text><text class="m" x="64" y="414">version</text><text class="s end" x="278" y="414">0 = nothing changed</text>
+      <text class="m" x="64" y="434">corrections</text><text class="s end" x="278" y="434">value fixes on read</text>
+      <text class="m" x="64" y="454">disabled_rules</text><text class="s end" x="278" y="454">reject rules off</text>
+      <text class="m" x="64" y="474">note</text><text class="s end" x="278" y="474">why it changed</text>
+      <text class="m" x="64" y="494">created_at</text><text class="s end" x="278" y="494">when it was saved</text>
+
+      <!-- comparison -->
+      <rect class="box" x="370" y="40" width="260" height="218" rx="7"/>
+      <path class="hdr" d="M371 47a6 6 0 0 1 6-6h246a6 6 0 0 1 6 6v23H371z"/>
+      <text class="t" x="382" y="60">Comparison</text><text class="s end" x="618" y="60">a row on the Runs tab</text>
+      <text class="pk" x="380" y="84">PK</text><text class="m" x="404" y="84">comparison_id</text>
+      <text class="fk" x="380" y="104">FK</text><text class="m" x="404" y="104">dataset_id</text>
+      <text class="m" x="404" y="124">engines</text><text class="s end" x="618" y="124">DuckDB, jq or both</text>
+      <text class="m" x="404" y="144">run_ids</text><text class="s end" x="618" y="144">engine → run</text>
+      <text class="m" x="404" y="164">status</text><text class="s end" x="618" y="164">queued … completed</text>
+      <text class="m" x="404" y="184">verification</text><text class="s end" x="618" y="184">match or differ</text>
+      <text class="fk" x="380" y="204">FK</text><text class="m" x="404" y="204">benchmark_id</text><text class="s end" x="618" y="204">optional</text>
+      <text class="m" x="404" y="224">params</text><text class="s end" x="618" y="224">run filters</text>
+      <text class="m" x="404" y="244">rules_version</text><text class="s end" x="618" y="244">rules it used</text>
+
+      <!-- run -->
+      <rect class="box" x="710" y="40" width="260" height="218" rx="7"/>
+      <path class="hdr" d="M711 47a6 6 0 0 1 6-6h246a6 6 0 0 1 6 6v23H711z"/>
+      <text class="t" x="722" y="60">Pipeline run</text><text class="s end" x="958" y="60">one engine, once</text>
+      <text class="pk" x="720" y="84">PK</text><text class="m" x="744" y="84">run_id</text>
+      <text class="fk" x="720" y="104">FK</text><text class="m" x="744" y="104">comparison_id</text>
+      <text class="m" x="744" y="124">engine</text><text class="s end" x="958" y="124">duckdb or jq</text>
+      <text class="m" x="744" y="144">status</text><text class="s end" x="958" y="144">queued … succeeded</text>
+      <text class="m" x="744" y="164">current_stage</text><text class="s end" x="958" y="164">while running</text>
+      <text class="m" x="744" y="184">stages</text><text class="s end" x="958" y="184">5 × metrics</text>
+      <text class="m" x="744" y="204">outputs</text><text class="s end" x="958" y="204">name → file path</text>
+      <text class="m" x="744" y="224">quality · tracking</text><text class="s end" x="958" y="224">row counts</text>
+      <text class="m" x="744" y="244">rules</text><text class="s end" x="958" y="244">full copy</text>
+
+      <!-- benchmark -->
+      <rect class="box" x="370" y="320" width="260" height="138" rx="7"/>
+      <path class="hdr" d="M371 327a6 6 0 0 1 6-6h246a6 6 0 0 1 6 6v23H371z"/>
+      <text class="t" x="382" y="340">Benchmark</text><text class="s end" x="618" y="340">several sizes in a row</text>
+      <text class="pk" x="380" y="364">PK</text><text class="m" x="404" y="364">benchmark_id</text>
+      <text class="m" x="404" y="384">specs</text><text class="s end" x="618" y="384">sizes + settings</text>
+      <text class="m" x="404" y="404">engines</text>
+      <text class="m" x="404" y="424">status</text><text class="s end" x="618" y="424">preparing … completed</text>
+      <text class="m" x="404" y="444">comparison_ids</text><text class="s end" x="618" y="444">one per size</text>
+
+      <!-- stage metrics -->
+      <rect class="box" x="710" y="320" width="260" height="138" rx="7"/>
+      <path class="hdr" d="M711 327a6 6 0 0 1 6-6h246a6 6 0 0 1 6 6v23H711z"/>
+      <text class="t" x="722" y="340">Stage metrics</text><text class="s end" x="958" y="340">inside each run</text>
+      <text class="m" x="744" y="364">stage</text><text class="s end" x="958" y="364">ingest … aggregate</text>
+      <text class="m" x="744" y="384">wall_seconds</text><text class="s end" x="958" y="384">time on the clock</text>
+      <text class="m" x="744" y="404">cpu_seconds</text><text class="s end" x="958" y="404">time on all cores</text>
+      <text class="m" x="744" y="424">peak_rss_mb</text><text class="s end" x="958" y="424">most memory used</text>
+      <text class="m" x="744" y="444">rows_out</text><text class="s end" x="958" y="444">rows left after it</text>
+
+      <!-- links -->
+      <path class="edge" d="M370 100H330V80H292" marker-end="url(#s4a)"/>
+      <text class="lbl mid" x="330" y="72">runs on</text>
+      <path class="edge" d="M710 100H670V80H632" marker-end="url(#s4a)"/>
+      <text class="lbl mid" x="670" y="72">1 or 2 per</text>
+      <path class="edge" d="M500 258V318" marker-end="url(#s4a)"/>
+      <text class="lbl" x="508" y="292">part of (optional)</text>
+      <path class="edge" d="M840 258V318" marker-end="url(#s4a)"/>
+      <text class="lbl" x="848" y="292">holds 5, one per stage</text>
+      <path class="edge" d="M30 224H16V80H28" marker-end="url(#s4a)"/>
+      <text class="lbl mid" transform="rotate(-90 9 150)" x="9" y="150">versions</text>
+      <path class="edge dash" d="M370 389H330V200H292" marker-end="url(#s4a)"/>
+      <text class="lbl mid" transform="rotate(-90 330 296)" x="330" y="300">one per size</text>
+      <path class="edge dash" d="M970 244H988V530H160V510" marker-end="url(#s4a)"/>
+      <text class="lbl mid" x="575" y="534">each run keeps a full copy of the rules in force when it was created</text>
+    </svg></div>
+    <figcaption><b>A comparison is what the dashboard calls a run.</b> It points at one dataset and holds one pipeline run per engine. A benchmark is a list of comparisons, one per size, run one after another; it creates each size's dataset or reuses it. A dataset version points at the one it was made from (<code>parent_id</code>) and at the first of its family (<code>root_id</code>). Because each run keeps its own copy of the rules, changing the rules later never changes how an old result is explained.</figcaption>
+  </figure>
+
+  <h3>The same records on disk</h3>
+  <pre class="tree"><span class="d">data/</span>
+├── <span class="d">datasets/</span>
+│   ├── <span class="d">trades-50k-s42-d20-h7-c5/</span>      <span class="c">a generated dataset: the id is its settings</span>
+│   │   ├── manifest.json                <span class="c">the Dataset record</span>
+│   │   └── trades.parquet  trades.csv  … <span class="c">one file per table, in both formats</span>
+│   ├── <span class="d">upload-20261102-004253-0d67a4/</span>     <span class="c">an upload, kept exactly as it arrived</span>
+│   ├── <span class="d">upload-20261102-004253-0d67a4-v2/</span>  <span class="c">a version: Parquet, with its fixes applied</span>
+│   └── <span class="d">upload-20261102-004253-0d67a4-v3/</span>  <span class="c">the next version of the same family</span>
+├── <span class="d">runs/</span>
+│   └── <span class="d">run-jq-20261102-000948-d7b67f/</span>
+│       ├── <span class="d">work/</span>                        <span class="c">jq's in-between files, deleted after the run</span>
+│       └── <span class="d">output/</span>                      <span class="c">trades.ndjson  rejects.ndjson  exposures.ndjson</span>
+│                                        <span class="c">quality_report.json  row_status.parquet</span>
+├── <span class="d">state/</span>
+│   ├── runs/  comparisons/  benchmarks/  <span class="c">one JSON file per record</span>
+│   └── rules/1.json  rules/2.json  …      <span class="c">one file per rules version</span>
+└── <span class="d">reports/</span>                         <span class="c">bench-….md and .json, written by make benchmark</span></pre>
+</section>
+
+<!-- ============ STATUSES ============ -->
+<section id="statuses">
+  <header>
+    <span class="eyebrow">Behaviour</span>
+    <h2>Statuses and what moves them</h2>
+    <p class="lead">Every record moves forward through a few statuses, and each move is caused by one event. The last row shows the four ways an input row can end up.</p>
+  </header>
+  <figure>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1000 600" style="min-width:860px" role="img" aria-label="State machines for dataset, pipeline run, comparison and benchmark, labelled with the events that move them, and the four final states of an input row: duplicate, rejected, filtered out or delivered.">
+      <defs>
+        <marker id="s5a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <!-- dataset -->
+      <text class="t" x="20" y="62">Dataset</text><text class="s" x="20" y="78">manifest.json</text>
+      <rect class="st-warn" x="200" y="46" width="120" height="32" rx="16"/><text class="mid m" x="260" y="66">pending</text>
+      <rect class="st-good" x="480" y="14" width="120" height="32" rx="16"/><text class="mid m" x="540" y="34">ready</text>
+      <rect class="st-bad" x="480" y="78" width="120" height="32" rx="16"/><text class="mid m" x="540" y="98">failed</text>
+      <rect class="st-warn" x="760" y="78" width="170" height="32" rx="16"/><text class="mid m" x="845" y="98">new v2 · pending</text>
+      <path class="edge" d="M320 62H400V30H478" marker-end="url(#s5a)"/><text class="lbl m end" x="394" y="40">DatasetReady</text>
+      <path class="edge" d="M320 62H400V94H478" marker-end="url(#s5a)"/><text class="lbl m end" x="394" y="92">DatasetFailed</text>
+      <path class="edge" d="M600 94H758" marker-end="url(#s5a)"/><text class="lbl mid" x="679" y="88">save a version</text>
+      <path class="edge dash" d="M600 30H845V76" marker-end="url(#s5a)"/><text class="lbl mid" x="722" y="24">also possible from ready</text>
+
+      <!-- run -->
+      <text class="t" x="20" y="182">Pipeline run</text><text class="s" x="20" y="198">state/runs</text>
+      <rect class="st-muted" x="200" y="166" width="120" height="32" rx="16"/><text class="mid m" x="260" y="186">queued</text>
+      <rect class="st-warn" x="400" y="166" width="120" height="32" rx="16"/><text class="mid m" x="460" y="186">running</text>
+      <rect class="st-good" x="620" y="134" width="130" height="32" rx="16"/><text class="mid m" x="685" y="154">succeeded</text>
+      <rect class="st-bad" x="620" y="198" width="130" height="32" rx="16"/><text class="mid m" x="685" y="218">failed</text>
+      <path class="edge" d="M320 182H398" marker-end="url(#s5a)"/><text class="lbl m mid" x="359" y="174">RunStarted</text>
+      <path class="edge" d="M520 182H560V150H618" marker-end="url(#s5a)"/><text class="lbl m end" x="554" y="152">RunFinished · ok</text>
+      <path class="edge" d="M520 182H560V214H618" marker-end="url(#s5a)"/><text class="lbl m end" x="554" y="222">RunFinished · error</text>
+      <text class="s" x="770" y="186">stage times update on every</text>
+      <text class="s" x="770" y="202">StageStarted / StageCompleted</text>
+
+      <!-- comparison -->
+      <text class="t" x="20" y="302">Comparison</text><text class="s" x="20" y="318">state/comparisons</text>
+      <rect class="st-muted" x="200" y="286" width="100" height="32" rx="16"/><text class="mid m" x="250" y="306">queued</text>
+      <rect class="st-warn" x="360" y="286" width="100" height="32" rx="16"/><text class="mid m" x="410" y="306">running</text>
+      <rect class="st-warn" x="560" y="286" width="110" height="32" rx="16"/><text class="mid m" x="615" y="306">verifying</text>
+      <rect class="st-good" x="780" y="286" width="120" height="32" rx="16"/><text class="mid m" x="840" y="306">completed</text>
+      <path class="edge" d="M300 302H358" marker-end="url(#s5a)"/><text class="lbl mid" x="330" y="336">started</text>
+      <path class="edge" d="M460 302H558" marker-end="url(#s5a)"/><text class="lbl mid" x="510" y="336">both runs done</text>
+      <path class="edge" d="M670 302H778" marker-end="url(#s5a)"/><text class="lbl mid" x="725" y="336">verdict saved</text>
+      <path class="edge dash" d="M410 286V262H840V284" marker-end="url(#s5a)"/><text class="lbl mid" x="625" y="256">one engine, or the check is off</text>
+
+      <!-- benchmark -->
+      <text class="t" x="20" y="422">Benchmark</text><text class="s" x="20" y="438">state/benchmarks</text>
+      <rect class="st-muted" x="200" y="406" width="120" height="32" rx="16"/><text class="mid m" x="260" y="426">preparing</text>
+      <rect class="st-warn" x="420" y="406" width="110" height="32" rx="16"/><text class="mid m" x="475" y="426">running</text>
+      <rect class="st-good" x="640" y="374" width="130" height="32" rx="16"/><text class="mid m" x="705" y="394">completed</text>
+      <rect class="st-bad" x="640" y="438" width="130" height="32" rx="16"/><text class="mid m" x="705" y="458">failed</text>
+      <path class="edge" d="M320 422H418" marker-end="url(#s5a)"/><text class="lbl mid" x="369" y="414">first size starts</text>
+      <path class="edge" d="M530 422H580V390H638" marker-end="url(#s5a)"/><text class="lbl end" x="574" y="392">all sizes done</text>
+      <path class="edge" d="M530 422H580V454H638" marker-end="url(#s5a)"/><text class="lbl end" x="574" y="462">a size could not be built</text>
+
+      <!-- row fate -->
+      <text class="t" x="20" y="536">Input row</text><text class="s" x="20" y="552">row_status.parquet</text>
+      <rect class="st-muted" x="200" y="514" width="100" height="32" rx="16"/><text class="mid m" x="250" y="534">every row</text>
+      <path class="edge" d="M300 530H818" marker-end="url(#s5a)"/>
+      <rect class="st-good" x="820" y="514" width="110" height="32" rx="16"/><text class="mid m" x="875" y="534">delivered</text>
+      <circle class="st-muted" cx="400" cy="530" r="5"/><circle class="st-muted" cx="560" cy="530" r="5"/><circle class="st-muted" cx="720" cy="530" r="5"/>
+      <text class="k mid" x="400" y="516">CLEAN</text><text class="k mid" x="560" y="516">VALIDATE</text><text class="k mid" x="720" y="516">TRANSFORM</text>
+      <path class="edge" d="M400 535V560" marker-end="url(#s5a)"/><path class="edge" d="M560 535V560" marker-end="url(#s5a)"/><path class="edge" d="M720 535V560" marker-end="url(#s5a)"/>
+      <rect class="st-muted" x="350" y="562" width="100" height="28" rx="14"/><text class="mid m" x="400" y="580">duplicate</text>
+      <rect class="st-bad" x="510" y="562" width="100" height="28" rx="14"/><text class="mid m" x="560" y="580">rejected</text>
+      <rect class="st-warn" x="665" y="562" width="110" height="28" rx="14"/><text class="mid m" x="720" y="580">filtered out</text>
+    </svg></div>
+    <figcaption><b>Statuses only move forward, and only the state projector changes them</b>, by reacting to the event on the arrow. A dataset's own status never goes back: saving a version (Fix columns or edits) makes a new dataset that starts at pending. If the app stops while something is in flight, it marks that record failed at the next start. An input row leaves at the first stage that removes it: a later copy of the same trade in clean, a broken rule in validate, a run filter in transform. Every other row is delivered.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ PIPELINE ============ -->
+<section id="pipeline">
+  <header>
+    <span class="eyebrow">Behaviour</span>
+    <h2>The pipeline, step by step, in both engines</h2>
+    <p class="lead">Both engines do the same five stages and write the same output files. DuckDB keeps everything in tables in memory. jq passes NDJSON files from one program to the next. This is where the speed gap comes from.</p>
+  </header>
+  <figure>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1170 530" style="min-width:980px" role="img" aria-label="Swimlane diagram. Top lane DuckDB tables per stage, bottom lane jq files and programs per stage, middle lane the shared output files. After the stages, the output checker compares the two engines and the row tracker writes row_status.">
+      <defs>
+        <marker id="s8a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="s8f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-file" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <!-- lanes -->
+      <rect class="lane-duck" x="0" y="56" width="1170" height="170" rx="8"/>
+      <rect class="lane-file" x="0" y="236" width="1170" height="80" rx="8"/>
+      <rect class="lane-jq" x="0" y="326" width="1170" height="196" rx="8"/>
+      <text class="t" x="12" y="84">DuckDB</text><text class="s" x="12" y="100">tables in</text><text class="s" x="12" y="114">memory</text>
+      <text class="t" x="12" y="266">Output</text><text class="t" x="12" y="282">files</text><text class="s" x="12" y="298">same for both</text>
+      <text class="t" x="12" y="354">jq</text><text class="s" x="12" y="370">NDJSON files</text><text class="s" x="12" y="384">on disk</text>
+      <!-- stage headers -->
+      <text class="t" x="120" y="28">1 · Ingest</text><text class="s" x="120" y="44">read 5 tables + corrections</text>
+      <text class="t" x="295" y="28">2 · Clean</text><text class="s" x="295" y="44">trim, parse, dedupe</text>
+      <text class="t" x="470" y="28">3 · Validate</text><text class="s" x="470" y="44">13 rules, minus any off</text>
+      <text class="t" x="645" y="28">4 · Transform</text><text class="s" x="645" y="44">join, walk trees, nest</text>
+      <text class="t" x="820" y="28">5 · Aggregate</text><text class="s" x="820" y="44">exposure per parent</text>
+      <text class="t" x="995" y="28">After the stages</text><text class="s" x="995" y="44">check and track</text>
+
+      <!-- duckdb lane -->
+      <rect class="duck" x="120" y="76" width="145" height="56" rx="7"/>
+      <text class="t" x="132" y="96">raw_* × 5</text><text class="s" x="132" y="112">read_parquet / read_csv</text><text class="s" x="132" y="126">every column as text</text>
+      <rect class="duck" x="295" y="76" width="145" height="56" rx="7"/>
+      <text class="t" x="307" y="96">clean_* × 5</text><text class="s" x="307" y="112">clean.sql</text><text class="s" x="307" y="126">one SQL script</text>
+      <rect class="duck" x="470" y="76" width="145" height="56" rx="7"/>
+      <text class="t" x="482" y="96">validated_trades</text><text class="s" x="482" y="112">validate.sql</text><text class="s" x="482" y="126">errors[ ] per trade</text>
+      <rect class="duck" x="645" y="66" width="145" height="40" rx="7"/>
+      <text class="t" x="657" y="84">dimensions</text><text class="s" x="657" y="98">dimensions.sql: trees</text>
+      <rect class="duck" x="645" y="116" width="145" height="50" rx="7"/>
+      <text class="t" x="657" y="136">out_trades</text><text class="s" x="657" y="152">trades.sql: nested JSON</text>
+      <rect class="duck" x="820" y="76" width="145" height="56" rx="7"/>
+      <text class="t" x="832" y="96">out_exposures</text><text class="s" x="832" y="112">aggregate.sql</text><text class="s" x="832" y="126">sum per parent</text>
+      <path class="edge" d="M265 104H293" marker-end="url(#s8a)"/>
+      <path class="edge" d="M440 104H468" marker-end="url(#s8a)"/>
+      <path class="edge" d="M615 104H630V86H643" marker-end="url(#s8a)"/>
+      <path class="edge" d="M717 106V114" marker-end="url(#s8a)"/>
+      <path class="edge" d="M790 141H805V104H818" marker-end="url(#s8a)"/>
+      <text class="s" x="132" y="160">1 query per table</text>
+      <text class="s" x="482" y="160">all 13 rules in one pass</text>
+      <text class="s" x="832" y="160">reads out_trades</text>
+
+      <!-- outputs lane -->
+      <rect class="file" x="470" y="252" width="145" height="40" rx="7"/><text class="m" x="482" y="276">rejects.ndjson</text>
+      <rect class="file" x="645" y="252" width="145" height="40" rx="7"/><text class="m" x="657" y="276">trades.ndjson</text>
+      <rect class="file" x="820" y="252" width="145" height="40" rx="7"/><text class="m" x="832" y="276">exposures.ndjson</text>
+      <rect class="file" x="995" y="244" width="160" height="30" rx="6"/><text class="m" x="1007" y="264">quality_report.json</text>
+      <rect class="file" x="995" y="280" width="160" height="30" rx="6"/><text class="m" x="1007" y="300">row_status.parquet</text>
+      <path class="edge file" d="M542 132V250" marker-end="url(#s8f)"/><text class="lbl" x="548" y="200">COPY</text>
+      <path class="edge file" d="M717 166V250" marker-end="url(#s8f)"/><text class="lbl" x="723" y="214">COPY</text>
+      <path class="edge file" d="M892 132V250" marker-end="url(#s8f)"/><text class="lbl" x="898" y="200">COPY</text>
+
+      <!-- jq lane -->
+      <rect class="jq" x="120" y="346" width="145" height="66" rx="7"/>
+      <text class="t" x="132" y="366">raw/*.ndjson × 5</text><text class="s" x="132" y="382">written by DuckDB COPY:</text><text class="s" x="132" y="396">jq can't read CSV/Parquet</text>
+      <rect class="jq" x="295" y="346" width="145" height="66" rx="7"/>
+      <text class="t" x="307" y="366">clean/*.ndjson</text><text class="s" x="307" y="382">clean_reference.jq × 4</text><text class="s" x="307" y="396">clean_trades.jq</text>
+      <rect class="jq" x="470" y="346" width="145" height="40" rx="7"/>
+      <text class="t" x="482" y="364">trade_ids.json</text><text class="s" x="482" y="378">trade_ids.jq</text>
+      <rect class="jq" x="470" y="396" width="145" height="40" rx="7"/>
+      <text class="t" x="482" y="414">validated.ndjson</text><text class="s" x="482" y="428">validate.jq</text>
+      <rect class="jq" x="645" y="346" width="145" height="40" rx="7"/>
+      <text class="t" x="657" y="364">dimensions.json</text><text class="s" x="657" y="378">dimensions.jq</text>
+      <rect class="jq" x="645" y="396" width="145" height="40" rx="7"/>
+      <text class="t" x="657" y="414">lineage.json</text><text class="s" x="657" y="428">lineage_index.jq</text>
+      <rect class="jq" x="645" y="446" width="145" height="40" rx="7"/>
+      <text class="t" x="657" y="464">trades.jq</text><text class="s" x="657" y="478">joins it all, nests</text>
+      <rect class="jq" x="820" y="346" width="145" height="40" rx="7"/>
+      <text class="t" x="832" y="364">exposures.jq</text><text class="s" x="832" y="378">streaming reduce</text>
+      <path class="edge" d="M265 379H293" marker-end="url(#s8a)"/>
+      <path class="edge" d="M440 366H468" marker-end="url(#s8a)"/>
+      <path class="edge" d="M542 386V394" marker-end="url(#s8a)"/>
+      <path class="edge" d="M542 436V466H643" marker-end="url(#s8a)"/>
+      <path class="edge" d="M717 386V394" marker-end="url(#s8a)"/>
+      <path class="edge" d="M717 436V444" marker-end="url(#s8a)"/>
+      <path class="edge file" d="M615 416H628V272H617" marker-end="url(#s8f)"/>
+      <text class="lbl mid" transform="rotate(-90 637 340)" x="637" y="340">rejects.jq</text>
+      <path class="edge file" d="M790 466H800V280H792" marker-end="url(#s8f)"/>
+      <path class="edge file" d="M790 262H812V366H818" marker-end="url(#s8f)"/>
+      <path class="edge file" d="M892 346V294" marker-end="url(#s8f)"/>
+      <text class="k" x="307" y="430">5 PASSES</text>
+      <text class="k" x="482" y="456">4 PASSES</text>
+      <text class="k" x="657" y="504">3 PASSES</text>
+      <text class="k" x="832" y="404">1 PASS</text>
+      <text class="k" x="132" y="430">1 COPY PER TABLE</text>
+
+      <!-- after -->
+      <rect class="box" x="995" y="76" width="160" height="100" rx="7"/>
+      <text class="t" x="1007" y="96">Output checker</text>
+      <text class="s" x="1007" y="114">matches documents by key</text>
+      <text class="s" x="1007" y="130">1 cent tolerance on money</text>
+      <text class="s" x="1007" y="146">a fixed sample above</text>
+      <text class="s" x="1007" y="160">200k rows</text>
+      <path class="edge" d="M965 104H993" marker-end="url(#s8a)"/>
+      <path class="edge" d="M965 366H980V160H993" marker-end="url(#s8a)"/>
+      <text class="s" x="1007" y="342">Row tracker: joins the</text>
+      <text class="s" x="1007" y="358">source file with rejects</text>
+      <text class="s" x="1007" y="374">and trades to find every</text>
+      <text class="s" x="1007" y="390">row's fate</text>
+    </svg></div>
+    <figcaption><b>DuckDB runs each stage as one SQL script over tables that stay in memory. jq needs 13 separate passes over files</b>, and it first needs DuckDB to turn CSV and Parquet into NDJSON (that time counts as jq's). Lookups that SQL gets from a join, jq has to build as small index files first (<code>trade_ids.json</code>, <code>dimensions.json</code>, <code>lineage.json</code>). Both engines then write the same three files, and the checker proves they match.</figcaption>
+  </figure>
+  <ul class="readme">
+    <li><span>Follow a lane left to right to see one engine. Arrows into the middle lane are the moment an output file gets written.</span></li>
+    <li><span>Correction rules are applied in the read step of ingest, and that read step is the same SQL for both engines (jq's input is written by a DuckDB COPY). So both engines see exactly the same corrected values.</span></li>
+    <li><span>Switched-off rules are removed from each trade's list of errors in validate. DuckDB filters the list in SQL; jq gets the list of switched-off codes as an argument. A trade with no errors left is valid.</span></li>
+    <li><span>Rejects are written as soon as validate finishes. That's why the trade tracker can show rejected rows before the run ends.</span></li>
+    <li><span>In lean mode, DuckDB streams <code>out_trades</code> as a view and drops tables early. That nearly halves its memory at 1M rows.</span></li>
+  </ul>
+</section>
+
+<!-- ============ RULES ============ -->
+<section id="rules">
+  <header>
+    <span class="eyebrow">Behaviour</span>
+    <h2>Validation rules</h2>
+    <p class="lead">Every trade is checked against all 13 reject rules, not just until the first failure, so a reject lists every problem at once. Five of them can be switched off on the Rules tab; the other eight always stay on, for the reason given. Warnings never reject a trade.</p>
+  </header>
+  <div class="tw"><table>
+    <thead><tr><th>Code</th><th>Stage</th><th>When it fires</th><th>Switch off?</th></tr></thead>
+    <tbody>
+      <tr><td class="grp" colspan="4">Errors: the trade goes to rejects.ndjson</td></tr>
+      <tr><td><code>E_TRADE_ID_MISSING</code></td><td>validate</td><td>No trade id</td><td><span class="tag">No</span> Every output is keyed by trade id.</td></tr>
+      <tr><td><code>E_EVENT_TYPE_INVALID</code></td><td>validate</td><td>Event type is not NEW, AMEND or CANCEL</td><td><span class="tag ok">Yes</span></td></tr>
+      <tr><td><code>E_EVENT_LINEAGE_MISMATCH</code></td><td>validate</td><td>NEW with an earlier version, or AMEND / CANCEL without one</td><td><span class="tag ok">Yes</span></td></tr>
+      <tr><td><code>E_TRADE_DATE_INVALID</code></td><td>validate</td><td>Trade date missing or not a real date</td><td><span class="tag ok">Yes</span></td></tr>
+      <tr><td><code>E_SETTLEMENT_BEFORE_TRADE</code></td><td>validate</td><td>Settles before it was traded</td><td><span class="tag ok">Yes</span></td></tr>
+      <tr><td><code>E_SIDE_INVALID</code></td><td>validate</td><td>Side is not BUY or SELL after cleaning</td><td><span class="tag ok">Yes</span></td></tr>
+      <tr><td><code>E_QUANTITY_INVALID</code></td><td>validate</td><td>Quantity missing, zero or negative</td><td><span class="tag">No</span> The amount is quantity times price; without a quantity it can't be calculated.</td></tr>
+      <tr><td><code>E_PRICE_INVALID</code></td><td>validate</td><td>Price missing, zero or negative</td><td><span class="tag">No</span> Same reason: no price, no amount.</td></tr>
+      <tr><td><code>E_CURRENCY_UNKNOWN</code></td><td>validate</td><td>Currency not in fx_rates</td><td><span class="tag">No</span> The amount can't be converted to US dollars.</td></tr>
+      <tr><td><code>E_INSTRUMENT_UNRESOLVED</code></td><td>validate</td><td>instrument_id not in instruments</td><td><span class="tag">No</span> The output document is built around the instrument.</td></tr>
+      <tr><td><code>E_COUNTERPARTY_UNRESOLVED</code></td><td>validate</td><td>counterparty_id not in counterparties</td><td><span class="tag">No</span> Exposure is grouped by the counterparty's parent company.</td></tr>
+      <tr><td><code>E_BOOK_UNRESOLVED</code></td><td>validate</td><td>book_id not in books</td><td><span class="tag">No</span> The output document needs the book it was traded in.</td></tr>
+      <tr><td><code>E_PREVIOUS_TRADE_UNRESOLVED</code></td><td>validate</td><td>The earlier version it amends does not exist</td><td><span class="tag">No</span> A version chain can't be built without the earlier version.</td></tr>
+      <tr><td class="grp" colspan="4">Warnings: the trade is kept, with the warning attached</td></tr>
+      <tr><td><code>W_CURRENCY_IMPUTED</code></td><td>clean</td><td>Currency was empty and taken from the instrument</td><td>n/a</td></tr>
+      <tr><td><code>W_SETTLEMENT_IMPUTED</code></td><td>clean</td><td>Settlement date was empty and set to trade date + 2 days</td><td>n/a</td></tr>
+      <tr><td><code>W_COUNTERPARTY_HIERARCHY_CYCLE</code></td><td>transform</td><td>The company tree loops, so the walk stopped</td><td>n/a</td></tr>
+      <tr><td><code>W_COUNTERPARTY_PARENT_UNRESOLVED</code></td><td>transform</td><td>A parent company is missing, so the tree ends early</td><td>n/a</td></tr>
+      <tr><td><code>W_LINEAGE_CYCLE</code></td><td>transform</td><td>A trade's versions loop, so no version number</td><td>n/a</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ RULES YOU CAN CHANGE ============ -->
+<section id="changing">
+  <header>
+    <span class="eyebrow">Behaviour</span>
+    <h2>Rules you can change</h2>
+    <p class="lead">Two kinds of rule live on the Rules tab. Correction rules change a value while the data is read. Validation switches turn a reject rule off. Both are saved together as one numbered version; new runs use the newest one, and every run keeps the one it used.</p>
+  </header>
+  <figure>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1000 270" style="min-width:860px" role="img" aria-label="Where rules act. You edit rules on the Rules tab or press Make it a rule on an edit in the Data tab. Saving writes a new rules version file. Each new run gets a copy of the newest version. Correction rules act in the ingest stage, while reading; switches act in the validate stage.">
+      <defs>
+        <marker id="s12a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="s12f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-file" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <rect class="box" x="20" y="40" width="170" height="70" rx="8"/><text class="k" x="34" y="58">TAB</text><text class="t" x="34" y="76">Rules</text><text class="s" x="34" y="94">change, add a note, Save</text>
+      <rect class="box" x="20" y="170" width="170" height="70" rx="8"/><text class="k" x="34" y="188">TAB</text><text class="t" x="34" y="206">Data</text><text class="s" x="34" y="224">an edit: Make it a rule</text>
+      <rect class="file" x="250" y="40" width="200" height="70" rx="8"/><text class="t" x="264" y="64">rules version N</text><text class="m" x="264" y="84">state/rules/N.json</text><text class="s" x="264" y="100">never changed once saved</text>
+      <rect class="box" x="510" y="40" width="190" height="70" rx="8"/><text class="t" x="524" y="64">New run</text><text class="s" x="524" y="82">gets a copy of the</text><text class="s" x="524" y="98">newest version</text>
+      <rect class="duck" x="790" y="20" width="190" height="64" rx="8"/><text class="t" x="804" y="42">1 · Ingest</text><text class="s" x="804" y="60">corrections: value A → B,</text><text class="s" x="804" y="75">while reading, both engines</text>
+      <rect class="duck" x="790" y="100" width="190" height="64" rx="8"/><text class="t" x="804" y="122">3 · Validate</text><text class="s" x="804" y="140">switched-off codes removed</text><text class="s" x="804" y="155">from each trade's errors</text>
+      <path class="edge file" d="M190 75H248" marker-end="url(#s12f)"/><text class="lbl mid" x="219" y="67">Save</text>
+      <path class="edge file" d="M190 205H350V112" marker-end="url(#s12f)"/><text class="lbl" x="200" y="198">saves at once</text>
+      <path class="edge" d="M450 75H508" marker-end="url(#s12a)"/><text class="lbl mid" x="479" y="67">copied</text>
+      <path class="edge" d="M700 62H788" marker-end="url(#s12a)"/><text class="lbl mid" x="745" y="55">corrections</text>
+      <path class="edge" d="M700 88H730V132H788" marker-end="url(#s12a)"/><text class="lbl mid" x="760" y="125">switches</text>
+      <rect class="box2" x="510" y="170" width="470" height="70" rx="8"/>
+      <text class="t" x="524" y="194">Older runs keep the copy they were made with</text>
+      <text class="s" x="524" y="212">Runs already going are not affected by a save. Each run row shows "rules vN"</text>
+      <text class="s" x="524" y="228">when it used changed rules, and the run record holds the full copy.</text>
+    </svg></div>
+    <figcaption><b>Rules never touch a file.</b> A correction happens while a run reads the data, so the dataset on disk stays as it is, and the same rule works on every dataset. Saving with nothing changed makes no new version. Version 0 means the defaults: no corrections and every reject rule on.</figcaption>
+  </figure>
+
+  <h3>How a correction rule matches</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Table</th><th>Column</th><th>When the value is</th><th>Change it to</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td>trades</td><td><code>side</code></td><td><code>HOLD</code></td><td><code>BUY</code></td><td><code>HOLD</code> and <code> HOLD </code> become <code>BUY</code> (spaces around the value are ignored). <code>hold</code> does not match: case matters.</td></tr>
+      <tr><td>trades</td><td><code>currency</code></td><td><i>empty</i></td><td><code>USD</code></td><td>A missing or blank currency becomes <code>USD</code>, before clean would fill it from the instrument.</td></tr>
+      <tr><td>counterparties</td><td><code>country</code></td><td><code>UK</code></td><td><code>GB</code></td><td>Every counterparty with country <code>UK</code> gets <code>GB</code>, in every dataset, in new runs.</td></tr>
+      <tr><td>trades</td><td><code>previous_trade_id</code></td><td><code>NONE</code></td><td><i>empty</i></td><td>Leaving "Change it to" empty empties the field. Here a NEW trade that wrote <code>NONE</code> as its earlier version no longer points at a trade that doesn't exist.</td></tr>
+    </tbody>
+  </table></div>
+  <ul class="readme">
+    <li><span>A rule compares the whole value. It can only name the expected columns of a table, and there can be only one rule per table, column and value.</span></li>
+    <li><span>Each rule has its own on/off switch, so you can pause it without deleting it.</span></li>
+    <li><span>The trade tracker applies the same corrections to trade ids, so its rows still line up with the run's output.</span></li>
+    <li><span>Switching a reject rule off keeps the trades whose only problems were switched-off rules. They are delivered like any valid trade, and the code no longer appears in the quality report.</span></li>
+    <li><span><code>tests/test_parity.py</code> switches each of the five rules off, on data built to break it, and checks both engines still give the same output. A rule only becomes switchable once it passes this test.</span></li>
+  </ul>
+
+  <h3>An edit or a correction rule?</h3>
+  <div class="tw"><table>
+    <thead><tr><th></th><th>Edit, on the Data tab</th><th>Correction rule, on the Rules tab</th></tr></thead>
+    <tbody>
+      <tr><td><b>Changes</b></td><td>One value in one row of one dataset</td><td>Every matching value, in every dataset</td></tr>
+      <tr><td><b>Can remove rows</b></td><td>Yes</td><td>No</td></tr>
+      <tr><td><b>Happens</b></td><td>Once, when you save: a worker writes a new copy</td><td>In every new run, while reading</td></tr>
+      <tr><td><b>You get</b></td><td>A new dataset version (v2, v3 …)</td><td>A new rules version</td></tr>
+      <tr><td><b>Files on disk</b></td><td>A new copy; the original is kept</td><td>Nothing changes</td></tr>
+      <tr><td><b>To undo</b></td><td>Use the earlier version</td><td>Switch the rule off, or delete it, and save</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ SEQUENCE ============ -->
+<section id="sequence">
+  <header>
+    <span class="eyebrow">Behaviour</span>
+    <h2>One run, start to finish</h2>
+    <p class="lead">What happens between pressing "Start run" and seeing "Match", message by message. Time runs downwards.</p>
+  </header>
+  <figure>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1080 770" style="min-width:960px" role="img" aria-label="Sequence diagram of one comparison. The browser posts, the service saves and announces, the orchestrator runs each engine in a worker, worker events flow back through the bus to records and the browser, then the checker compares outputs and the verdict is saved and shown.">
+      <defs>
+        <marker id="s9a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="s9e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-ev" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="s9r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-ret" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <!-- participants -->
+      <rect class="box" x="8" y="16" width="124" height="40" rx="7"/><text class="t mid" x="70" y="34">Browser</text><text class="s mid" x="70" y="49">dashboard</text>
+      <rect class="box" x="163" y="16" width="124" height="40" rx="7"/><text class="t mid" x="225" y="34">HTTP API</text><text class="s mid" x="225" y="49">route</text>
+      <rect class="box" x="318" y="16" width="124" height="40" rx="7"/><text class="t mid" x="380" y="34">Service</text><text class="s mid" x="380" y="49">comparisons</text>
+      <rect class="evt" x="473" y="16" width="124" height="40" rx="7"/><text class="t mid" x="535" y="34">Event bus</text><text class="s mid" x="535" y="49">in process</text>
+      <rect class="file" x="628" y="16" width="124" height="40" rx="7"/><text class="t mid" x="690" y="34">Records</text><text class="s mid" x="690" y="49">projector + JSON</text>
+      <rect class="box" x="783" y="16" width="124" height="40" rx="7"/><text class="t mid" x="845" y="34">Orchestrator</text><text class="s mid" x="845" y="49">comparisons</text>
+      <rect class="box" x="938" y="16" width="124" height="40" rx="7"/><text class="t mid" x="1000" y="34">Worker</text><text class="s mid" x="1000" y="49">fresh process</text>
+      <path class="life" d="M70 56V760M225 56V760M380 56V760M535 56V760M690 56V760M845 56V760M1000 56V760"/>
+
+      <!-- request -->
+      <path class="edge" d="M70 92H223" marker-end="url(#s9a)"/><text class="lbl mid m" x="147" y="86">POST /api/comparisons</text>
+      <path class="edge" d="M225 122H378" marker-end="url(#s9a)"/><text class="lbl mid m" x="302" y="116">request()</text>
+      <path class="edge" d="M380 152H688" marker-end="url(#s9a)"/><text class="lbl mid" x="535" y="146">save comparison + 1 run per engine, with today's rules</text>
+      <path class="edge ev" d="M380 182H533" marker-end="url(#s9e)"/><text class="lbl ev mid m" x="457" y="176">ComparisonRequested</text>
+      <path class="edge ev" d="M535 212H843" marker-end="url(#s9e)"/><text class="lbl ev mid" x="690" y="206">ComparisonRequested: start a background task</text>
+      <path class="edge ret" d="M225 242H72" marker-end="url(#s9r)"/><text class="lbl mid" x="147" y="236">202 Accepted, at once</text>
+      <path class="edge ev" d="M845 272H537" marker-end="url(#s9e)"/><text class="lbl ev mid m" x="690" y="266">ComparisonStarted</text>
+      <path class="edge ev" d="M535 296H688" marker-end="url(#s9e)"/><text class="lbl mid" x="612" y="290">status: running</text>
+
+      <!-- loop -->
+      <rect class="frame" x="300" y="312" width="770" height="270" rx="6"/>
+      <path class="hdr" d="M301 313h236v20H301z"/>
+      <text class="k" x="310" y="327">LOOP · EACH ENGINE, ONE AFTER ANOTHER</text>
+      <path class="edge" d="M845 350H998" marker-end="url(#s9a)"/><text class="lbl mid m" x="922" y="344">run_pipeline(engine)</text>
+      <path class="edge ev dash" d="M1000 380H537" marker-end="url(#s9e)"/><text class="lbl ev mid" x="767" y="374">RunStarted, StageStarted / StageCompleted × 5 (via the queue)</text>
+      <path class="edge ev" d="M535 410H688" marker-end="url(#s9e)"/><text class="lbl mid" x="612" y="404">stage times</text>
+      <path class="edge ev" d="M535 440H72" marker-end="url(#s9e)"/><text class="lbl ev mid" x="302" y="434">every event, live (SSE): the page refreshes</text>
+      <path class="edge" d="M1000 462H1040V486H1002" marker-end="url(#s9a)"/><text class="lbl end" x="994" y="480">row tracker</text>
+      <path class="edge ret" d="M1000 512H847" marker-end="url(#s9r)"/><text class="lbl mid m" x="922" y="506">RunOutcome</text>
+      <path class="edge ev" d="M845 542H537" marker-end="url(#s9e)"/><text class="lbl ev mid m" x="690" y="536">RunFinished</text>
+      <path class="edge ev" d="M535 566H688" marker-end="url(#s9e)"/><text class="lbl mid" x="612" y="560">succeeded + outputs</text>
+
+      <!-- verification -->
+      <path class="edge ev" d="M845 612H537" marker-end="url(#s9e)"/><text class="lbl ev mid m" x="690" y="606">VerificationStarted</text>
+      <path class="edge" d="M845 640H998" marker-end="url(#s9a)"/><text class="lbl mid m" x="922" y="634">verify(outputs)</text>
+      <path class="edge ret" d="M1000 668H847" marker-end="url(#s9r)"/><text class="lbl mid m" x="922" y="662">VerificationResult</text>
+      <path class="edge ev" d="M845 698H537" marker-end="url(#s9e)"/><text class="lbl ev mid m" x="690" y="692">ComparisonCompleted</text>
+      <path class="edge ev" d="M535 722H688" marker-end="url(#s9e)"/><text class="lbl mid" x="612" y="716">completed + verdict</text>
+      <path class="edge ev" d="M535 746H72" marker-end="url(#s9e)"/><text class="lbl ev mid" x="302" y="740">the result appears: Match or Differ</text>
+    </svg></div>
+    <figcaption><b>The request is answered as soon as the work is announced; everything after that happens in the background.</b> Violet arrows are events on the bus (dashed violet ones came through the worker queue), and dashed grey arrows are return values. The engines run one after another so their timings don't compete for the CPU, unless you tick "run both engines at the same time".</figcaption>
+  </figure>
+</section>
+
+<!-- ============ LAYERS ============ -->
+<section id="layers">
+  <header>
+    <span class="eyebrow">Code</span>
+    <h2>Code layers and the import rule</h2>
+    <p class="lead">Imports only point inward. The domain knows nothing about FastAPI, DuckDB or files. Adapters implement the domain's interfaces, and one file wires them together.</p>
+  </header>
+  <figure>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1000 540" style="min-width:860px" role="img" aria-label="Layer diagram. Entry points call the application layer, which uses the domain layer. Adapters implement domain ports. The application never imports adapters. bootstrap.py creates every object and wires them together.">
+      <defs>
+        <marker id="s6a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="s6b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-bad" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <rect class="zone" x="20" y="20" width="660" height="96" rx="10"/>
+      <text class="k" x="36" y="40">ENTRY POINTS</text>
+      <rect class="box" x="36" y="52" width="148" height="48" rx="7"/><text class="t m" x="48" y="72">api/routes/</text><text class="s" x="48" y="90">HTTP endpoints</text>
+      <rect class="box" x="196" y="52" width="148" height="48" rx="7"/><text class="t m" x="208" y="72">api/static/</text><text class="s" x="208" y="90">dashboard, tracker</text>
+      <rect class="box" x="356" y="52" width="148" height="48" rx="7"/><text class="t m" x="368" y="72">cli.py</text><text class="s" x="368" y="90">make benchmark</text>
+      <rect class="box" x="516" y="52" width="148" height="48" rx="7"/><text class="t m" x="528" y="72">main.py</text><text class="s" x="528" y="90">starts the app</text>
+
+      <rect class="zone" x="20" y="156" width="660" height="206" rx="10"/>
+      <text class="k" x="36" y="176">APPLICATION · THE STEPS</text>
+      <rect class="box" x="36" y="188" width="148" height="48" rx="7"/><text class="t m" x="48" y="208">services.py</text><text class="s" x="48" y="226">accept requests</text>
+      <rect class="box" x="196" y="188" width="148" height="48" rx="7"/><text class="t m" x="208" y="208">orchestrators.py</text><text class="s" x="208" y="226">run background work</text>
+      <rect class="box" x="356" y="188" width="148" height="48" rx="7"/><text class="t m" x="368" y="208">pipeline.py</text><text class="s" x="368" y="226">5 timed stages</text>
+      <rect class="box" x="516" y="188" width="148" height="48" rx="7"/><text class="t m" x="528" y="208">messaging.py</text><text class="s" x="528" y="226">event bus, tasks</text>
+      <rect class="box" x="36" y="244" width="148" height="48" rx="7"/><text class="t m" x="48" y="264">projections.py</text><text class="s" x="48" y="282">events → records</text>
+      <rect class="box" x="196" y="244" width="148" height="48" rx="7"/><text class="t m" x="208" y="264">verification.py</text><text class="s" x="208" y="282">DuckDB vs jq</text>
+      <rect class="box" x="356" y="244" width="148" height="48" rx="7"/><text class="t m" x="368" y="264">tracking.py</text><text class="s" x="368" y="282">row journeys</text>
+      <rect class="box" x="516" y="244" width="148" height="48" rx="7"/><text class="t m" x="528" y="264">reporting.py</text><text class="s" x="528" y="282">timings, ratios</text>
+      <rect class="box" x="36" y="300" width="148" height="48" rx="7"/><text class="t m" x="48" y="320">explorer.py</text><text class="s" x="48" y="338">pages of data</text>
+      <rect class="box" x="196" y="300" width="148" height="48" rx="7"/><text class="t m" x="208" y="320">queries.py</text><text class="s" x="208" y="338">report views</text>
+
+      <rect class="zone" x="20" y="402" width="660" height="118" rx="10"/>
+      <text class="k" x="36" y="422">DOMAIN · THE IDEAS</text>
+      <rect class="box" x="36" y="440" width="148" height="48" rx="7"/><text class="t m" x="48" y="460">models.py</text><text class="s" x="48" y="478">records</text>
+      <rect class="box" x="196" y="440" width="148" height="48" rx="7"/><text class="t m" x="208" y="460">events.py</text><text class="s" x="208" y="478">what happened</text>
+      <rect class="box" x="356" y="440" width="148" height="48" rx="7"/><text class="t m" x="368" y="460">ports.py</text><text class="s" x="368" y="478">interfaces</text>
+      <rect class="box" x="516" y="440" width="148" height="48" rx="7"/><text class="t m" x="528" y="460">contract.py</text><text class="s" x="528" y="478">columns, rule codes</text>
+
+      <rect class="zone" x="760" y="156" width="220" height="364" rx="10"/>
+      <text class="k" x="776" y="176">ADAPTERS</text><text class="s" x="776" y="192">engines/ and infrastructure/</text>
+      <rect class="duck" x="776" y="202" width="188" height="22" rx="4"/><text class="m" x="786" y="217">duckdb_engine/</text>
+      <rect class="jq" x="776" y="226" width="188" height="22" rx="4"/><text class="m" x="786" y="241">jq_engine/</text>
+      <rect class="duck" x="776" y="250" width="188" height="22" rx="4"/><text class="m" x="786" y="265">sources.py</text><text class="s end" x="956" y="265">shared read</text>
+      <rect class="box" x="776" y="274" width="188" height="22" rx="4"/><text class="m" x="786" y="289">workers.py</text>
+      <rect class="box" x="776" y="298" width="188" height="22" rx="4"/><text class="m" x="786" y="313">repositories.py</text>
+      <rect class="box" x="776" y="322" width="188" height="22" rx="4"/><text class="m" x="786" y="337">generator.py</text>
+      <rect class="box" x="776" y="346" width="188" height="22" rx="4"/><text class="m" x="786" y="361">jobs.py</text>
+      <rect class="box" x="776" y="370" width="188" height="22" rx="4"/><text class="m" x="786" y="385">row_tracker.py</text>
+      <rect class="box" x="776" y="394" width="188" height="22" rx="4"/><text class="m" x="786" y="409">column_reader.py</text>
+      <rect class="box" x="776" y="418" width="188" height="22" rx="4"/><text class="m" x="786" y="433">data_browser.py</text>
+      <rect class="box" x="776" y="442" width="188" height="22" rx="4"/><text class="m" x="786" y="457">resource_monitor.py</text>
+      <rect class="box" x="776" y="466" width="188" height="22" rx="4"/><text class="m" x="786" y="481">sse.py</text>
+
+      <rect class="brandbox" x="760" y="20" width="220" height="96" rx="10"/>
+      <text class="t m on" x="776" y="50">bootstrap.py</text>
+      <text class="on2" x="776" y="72">creates every object</text>
+      <text class="on2" x="776" y="90">and wires them together</text>
+
+      <path class="edge" d="M350 116V154" marker-end="url(#s6a)"/><text class="lbl" x="358" y="140">calls</text>
+      <path class="edge" d="M350 362V400" marker-end="url(#s6a)"/><text class="lbl" x="358" y="386">uses models, events, ports</text>
+      <path class="edge" d="M760 464H682" marker-end="url(#s6a)"/><text class="lbl mid" x="721" y="456">implements</text>
+      <path class="edge" d="M680 68H758" marker-end="url(#s6a)"/><text class="lbl mid" x="719" y="60">builds</text>
+      <path class="edge dash" d="M870 116V154" marker-end="url(#s6a)"/><text class="lbl" x="878" y="140">creates</text>
+      <path class="edge bad dash" d="M680 231H758" marker-end="url(#s6b)"/>
+      <path class="edge bad" d="M713 225L725 237M725 225L713 237"/>
+      <text class="lbl bad mid" x="719" y="219">never imports</text>
+    </svg></div>
+    <figcaption><b>The crossed-out arrow is the rule that keeps this testable.</b> No application module imports an adapter. Services, orchestrators and the pipeline runner only see the interfaces in <code>ports.py</code>, and <code>bootstrap.py</code> plugs in the real classes at startup. Adding a third engine means a new adapter folder and one line in the engine registry.</figcaption>
+  </figure>
+
+  <h3>Which class plugs into which interface</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Interface in <code>domain/ports.py</code></th><th>Real implementation</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>TransformationEngine</code></td><td><code>DuckDbEngine</code>, <code>JqEngine</code></td><td>Runs one stage and reports rows, files and stats</td></tr>
+      <tr><td><code>EngineFactory</code></td><td><code>create_engine</code> in <code>engines/__init__.py</code></td><td>Picks the engine by name (the registry)</td></tr>
+      <tr><td><code>Repository</code></td><td><code>JsonFileRepository</code></td><td>Saves, loads, lists and deletes records as JSON files</td></tr>
+      <tr><td><code>JobExecutor</code></td><td><code>ProcessJobExecutor</code></td><td>Runs a job in a fresh worker process</td></tr>
+      <tr><td><code>EventPublisher</code></td><td><code>EventBus</code></td><td>Delivers events to subscribers in order</td></tr>
+      <tr><td><code>EventSink</code></td><td><code>WorkerEventBridge.sink</code></td><td>Lets a worker put events on the shared queue</td></tr>
+      <tr><td><code>StageMonitor</code></td><td><code>ResourceMonitor</code></td><td>Samples time, CPU and peak memory, and stops jq if it grows too large</td></tr>
+      <tr><td><code>RowTracker</code></td><td><code>build_row_status</code></td><td>Writes row_status.parquet after a run</td></tr>
+      <tr><td><code>RowStatusReader</code></td><td><code>DuckDbRowStatusReader</code></td><td>Answers the trade tracker's queries</td></tr>
+      <tr><td><code>ColumnReader</code></td><td><code>DuckDbColumnReader</code></td><td>Reads a file's column names and first values, for Fix columns</td></tr>
+      <tr><td><code>DataBrowser</code></td><td><code>DuckDbDataBrowser</code></td><td>Reads one page of a raw table or an output file, with search, for the Data tab</td></tr>
+      <tr><td><code>WorkerJobs</code></td><td><code>WORKER_JOBS</code> in <code>jobs.py</code></td><td>The five functions a worker can run: generate, check an upload, build a version, run the pipeline, compare outputs</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ SERVICES ============ -->
+<section id="services">
+  <header>
+    <span class="eyebrow">Code</span>
+    <h2>Every service, in one line each</h2>
+    <p class="lead">Every moving part of the app, grouped by job. If someone asks "what does X do?", the answer is the line next to it.</p>
+  </header>
+  <div class="tw"><table>
+    <thead><tr><th>Part</th><th>File</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="grp" colspan="3">Services: the front desk. Each checks a request, saves it, announces it and answers at once</td></tr>
+      <tr><td><code>DatasetService</code></td><td><code>services.py</code></td><td>Generates a dataset (or reuses one with the same settings), registers uploads, lists columns for Fix columns, saves fixes and edits as new versions, deletes datasets</td></tr>
+      <tr><td><code>ComparisonService</code></td><td><code>services.py</code></td><td>Creates a run: one pipeline run per engine, with a copy of the current rules</td></tr>
+      <tr><td><code>BenchmarkService</code></td><td><code>services.py</code></td><td>Creates a benchmark from a list of sizes and settings</td></tr>
+      <tr><td><code>HistoryService</code></td><td><code>services.py</code></td><td>Deletes a finished run or benchmark with its output files, or clears all finished ones. Refuses anything still going</td></tr>
+      <tr><td><code>RulesService</code></td><td><code>services.py</code></td><td>Shows the current rules and which reject rules can be switched off; checks and saves new rule versions; lists their history</td></tr>
+      <tr><td><code>ExplorerService</code></td><td><code>explorer.py</code></td><td>Returns one page of a raw table or of an output file, with search</td></tr>
+      <tr><td><code>RowTrackingService</code></td><td><code>tracking.py</code></td><td>Answers the trade tracker: rows by fate, and one row's journey through the stages</td></tr>
+      <tr><td><code>ReportQueries</code></td><td><code>queries.py</code></td><td>Turns saved records into what the pages show: stage times, slowdown, benchmark tables</td></tr>
+      <tr><td class="grp" colspan="3">Orchestrators: the managers of background work. Each reacts to a "…Requested" event</td></tr>
+      <tr><td><code>DatasetOrchestrator</code></td><td><code>orchestrators.py</code></td><td>Runs the generator, the upload check or a version build in a worker, then announces ready or failed</td></tr>
+      <tr><td><code>ComparisonOrchestrator</code></td><td><code>orchestrators.py</code></td><td>Runs each engine in a worker (one after another unless asked otherwise), then the output check, then announces the verdict</td></tr>
+      <tr><td><code>BenchmarkOrchestrator</code></td><td><code>orchestrators.py</code></td><td>Goes through the sizes: makes or reuses the dataset, runs a comparison, waits for it, moves to the next size</td></tr>
+      <tr><td class="grp" colspan="3">Plumbing: moves events, work and records around</td></tr>
+      <tr><td><code>EventBus</code></td><td><code>messaging.py</code></td><td>Hands each event to everything that subscribed to it, in the order they subscribed</td></tr>
+      <tr><td><code>TaskSupervisor</code></td><td><code>messaging.py</code></td><td>Keeps track of background tasks, logs their failures, stops them at shutdown</td></tr>
+      <tr><td><code>StateProjector</code></td><td><code>projections.py</code></td><td>Applies each event to the JSON records. The only place a status changes</td></tr>
+      <tr><td><code>recover_interrupted</code></td><td><code>projections.py</code></td><td>At startup, marks anything that was in flight when the app stopped as failed</td></tr>
+      <tr><td><code>PipelineRunner</code></td><td><code>pipeline.py</code></td><td>Runs the five stages in order on one engine and measures each one</td></tr>
+      <tr><td><code>ProcessJobExecutor</code></td><td><code>workers.py</code></td><td>The worker pool: 2 jobs at a time, a fresh process for each, rebuilt after a crash</td></tr>
+      <tr><td><code>WorkerEventBridge</code></td><td><code>workers.py</code></td><td>Carries events from worker processes back onto the event bus</td></tr>
+      <tr><td><code>EventBroadcaster</code></td><td><code>sse.py</code></td><td>The live stream: sends every event to each open page. A slow page misses events; it never slows the app</td></tr>
+      <tr><td><code>JsonFileRepository</code></td><td><code>repositories.py</code></td><td>Saves, loads, lists and deletes one kind of record as JSON files</td></tr>
+      <tr><td><code>ResourceMonitor</code></td><td><code>resource_monitor.py</code></td><td>Measures time, CPU and peak memory of a stage; stops jq above its memory limit</td></tr>
+      <tr><td class="grp" colspan="3">Engines and data access: the parts that touch the data</td></tr>
+      <tr><td><code>DuckDbEngine</code></td><td><code>duckdb_engine/</code></td><td>The five stages as SQL scripts, over tables in memory</td></tr>
+      <tr><td><code>JqEngine</code></td><td><code>jq_engine/</code></td><td>The five stages as jq programs over NDJSON files; DuckDB converts the input for it first</td></tr>
+      <tr><td><code>source_select_sql</code></td><td><code>engines/sources.py</code></td><td>The one read step both engines share: every column as text, with correction rules applied</td></tr>
+      <tr><td><code>TradeDatasetGenerator</code></td><td><code>generator.py</code></td><td>Builds the five linked tables for a size and seed, with mess added</td></tr>
+      <tr><td><code>DuckDbColumnReader</code></td><td><code>column_reader.py</code></td><td>Reads the column names and first values of a file, for Fix columns</td></tr>
+      <tr><td><code>DuckDbDataBrowser</code></td><td><code>data_browser.py</code></td><td>Reads one page of a raw table or an output file; search by row number or any value</td></tr>
+      <tr><td><code>build_row_status</code></td><td><code>row_tracker.py</code></td><td>After a run, writes where every input row ended up</td></tr>
+      <tr><td><code>DuckDbRowStatusReader</code></td><td><code>row_tracker.py</code></td><td>Queries that file (and the rejects file, while a run is still going) for the tracker</td></tr>
+      <tr><td><code>verify_outputs</code></td><td><code>verification.py</code></td><td>Compares two engines' outputs document by document</td></tr>
+      <tr><td class="grp" colspan="3">Worker jobs: the five functions that run in a worker process (<code>jobs.py</code>)</td></tr>
+      <tr><td><code>generate_dataset_job</code></td><td><code>jobs.py</code></td><td>Writes a generated dataset, as Parquet and CSV by default</td></tr>
+      <tr><td><code>inspect_upload_job</code></td><td><code>jobs.py</code></td><td>Checks an upload (or a new version) has the expected columns, and counts its rows</td></tr>
+      <tr><td><code>derive_dataset_job</code></td><td><code>jobs.py</code></td><td>Writes a new version from its parent: renamed columns, changed values, removed rows</td></tr>
+      <tr><td><code>run_pipeline_job</code></td><td><code>jobs.py</code></td><td>Runs the pipeline on one engine, then the row tracker (unless <code>POC_ENGINE__TRACK_ROWS</code> is off)</td></tr>
+      <tr><td><code>verify_outputs</code></td><td><code>verification.py</code></td><td>Runs as the fifth job, so a big comparison doesn't block the app</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ EVENTS ============ -->
+<section id="events">
+  <header>
+    <span class="eyebrow">Code</span>
+    <h2>Processes and events</h2>
+    <p class="lead">Parts of the app never call each other directly to report progress. They publish events, and the bus hands each event to its subscribers in a fixed order.</p>
+  </header>
+  <figure>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1000 440" style="min-width:860px" role="img" aria-label="Event bus. Services, orchestrators and the worker bridge publish. Subscribers in order: state projector, event log, live stream, dataset orchestrator, comparison orchestrator, benchmark orchestrator. Orchestrators submit jobs to worker processes, which send events back through a queue.">
+      <defs>
+        <marker id="s7a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="s7e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-ev" d="M0 0L10 5L0 10z"/></marker>
+        <marker id="s7f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-file" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <text class="k" x="40" y="36">PUBLISHERS</text>
+      <rect class="box" x="40" y="50" width="230" height="56" rx="7"/><text class="t" x="56" y="74">Services</text><text class="s" x="56" y="92">requests, deletes, rule changes</text>
+      <rect class="box" x="40" y="130" width="230" height="56" rx="7"/><text class="t" x="56" y="154">Orchestrators</text><text class="s" x="56" y="172">started, finished, completed</text>
+      <rect class="evt" x="40" y="210" width="230" height="56" rx="7"/><text class="t" x="56" y="234">Worker bridge</text><text class="s" x="56" y="252">re-publishes worker events</text>
+      <rect class="zone" x="40" y="320" width="230" height="80" rx="9"/><text class="t" x="56" y="346">Worker processes</text><text class="s" x="56" y="364">pipeline, generator, checker</text><text class="s" x="56" y="382">a fresh process per job</text>
+      <path class="edge ev" d="M270 78H338" marker-end="url(#s7e)"/>
+      <path class="edge ev" d="M270 158H338" marker-end="url(#s7e)"/>
+      <path class="edge ev" d="M270 238H338" marker-end="url(#s7e)"/>
+      <path class="edge ev dash" d="M155 320V268" marker-end="url(#s7e)"/><text class="lbl ev" x="163" y="298">shared queue</text>
+
+      <rect class="bus" x="340" y="40" width="60" height="360" rx="8"/>
+      <text class="t on mid" transform="rotate(-90 370 220)" x="370" y="224">EVENT BUS</text>
+
+      <text class="k" x="470" y="30">SUBSCRIBERS, IN THIS ORDER</text>
+      <rect class="box" x="470" y="40" width="260" height="46" rx="7"/><circle class="num" cx="490" cy="63" r="10"/><text class="numt" x="490" y="67">1</text><text class="t" x="508" y="60">State projector</text><text class="s" x="508" y="76">every event → JSON records</text>
+      <rect class="box" x="470" y="100" width="260" height="46" rx="7"/><circle class="num" cx="490" cy="123" r="10"/><text class="numt" x="490" y="127">2</text><text class="t" x="508" y="120">Event log</text><text class="s" x="508" y="136">every event → one log line</text>
+      <rect class="box" x="470" y="160" width="260" height="46" rx="7"/><circle class="num" cx="490" cy="183" r="10"/><text class="numt" x="490" y="187">3</text><text class="t" x="508" y="180">Live stream</text><text class="s" x="508" y="196">every event → open pages</text>
+      <rect class="box" x="470" y="220" width="260" height="46" rx="7"/><circle class="num" cx="490" cy="243" r="10"/><text class="numt" x="490" y="247">4</text><text class="t" x="508" y="240">Dataset orchestrator</text><text class="s" x="508" y="256">generate, check upload, build version</text>
+      <rect class="box" x="470" y="280" width="260" height="46" rx="7"/><circle class="num" cx="490" cy="303" r="10"/><text class="numt" x="490" y="307">5</text><text class="t" x="508" y="300">Comparison orchestrator</text><text class="s" x="508" y="316">run engines, then check outputs</text>
+      <rect class="box" x="470" y="340" width="260" height="46" rx="7"/><circle class="num" cx="490" cy="363" r="10"/><text class="numt" x="490" y="367">6</text><text class="t" x="508" y="360">Benchmark orchestrator</text><text class="s" x="508" y="376">sizes one after another</text>
+      <path class="edge ev" d="M400 63H468" marker-end="url(#s7e)"/>
+      <path class="edge ev" d="M400 123H468" marker-end="url(#s7e)"/>
+      <path class="edge ev" d="M400 183H468" marker-end="url(#s7e)"/>
+      <path class="edge ev" d="M400 243H468" marker-end="url(#s7e)"/>
+      <path class="edge ev" d="M400 303H468" marker-end="url(#s7e)"/>
+      <path class="edge ev" d="M400 363H468" marker-end="url(#s7e)"/>
+
+      <rect class="file" x="790" y="40" width="180" height="46" rx="7"/><text class="t m" x="806" y="60">data/state/</text><text class="s" x="806" y="76">runs, comparisons, …</text>
+      <path class="edge file" d="M730 63H788" marker-end="url(#s7f)"/>
+      <rect class="box" x="790" y="160" width="180" height="46" rx="7"/><text class="t" x="806" y="180">Browser</text><text class="s" x="806" y="196">dashboard, tracker refresh</text>
+      <path class="edge ev" d="M730 183H788" marker-end="url(#s7e)"/>
+      <path class="edge" d="M600 386V420H155V402" marker-end="url(#s7a)"/><text class="lbl mid" x="420" y="414">submit jobs</text>
+    </svg></div>
+    <figcaption><b>The order matters: the projector runs first</b>, so a record is already up to date when the live stream tells a page to refresh. Orchestrators appear on both sides, because they react to "…Requested" events and then publish what happened. Deletes and rule changes are saved by the service itself; their events only tell open pages to refresh. Worker processes can't reach the bus directly, so they put events on a shared queue, and the worker bridge republishes them inside the app.</figcaption>
+  </figure>
+
+  <h3>Every event</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Event</th><th>Published by</th><th>Who reacts</th><th>What changes</th></tr></thead>
+    <tbody>
+      <tr><td class="grp" colspan="4">Datasets</td></tr>
+      <tr><td><code>DatasetGenerationRequested</code></td><td>DatasetService</td><td>Dataset orchestrator</td><td>Generates the files in a worker</td></tr>
+      <tr><td><code>DatasetUploaded</code></td><td>DatasetService</td><td>Dataset orchestrator</td><td>Checks the columns and counts rows</td></tr>
+      <tr><td><code>DatasetVersionRequested</code></td><td>DatasetService</td><td>Dataset orchestrator</td><td>Writes the new version (renamed columns, changed values, removed rows), then checks it</td></tr>
+      <tr><td><code>DatasetReady</code> / <code>DatasetFailed</code></td><td>Dataset orchestrator</td><td>Projector</td><td>Status ready or failed, row counts, sizes, error</td></tr>
+      <tr><td class="grp" colspan="4">Runs</td></tr>
+      <tr><td><code>ComparisonRequested</code></td><td>ComparisonService</td><td>Comparison orchestrator</td><td>Starts the engines in the background</td></tr>
+      <tr><td><code>ComparisonStarted</code></td><td>Comparison orchestrator</td><td>Projector</td><td>Status running</td></tr>
+      <tr><td><code>RunStarted</code></td><td>Pipeline runner, via the queue</td><td>Projector</td><td>Run running, worker process id</td></tr>
+      <tr><td><code>StageStarted</code> / <code>StageCompleted</code></td><td>Pipeline runner, via the queue</td><td>Projector</td><td>Current stage, stage times, files written so far</td></tr>
+      <tr><td><code>RunFinished</code></td><td>Comparison orchestrator</td><td>Projector</td><td>Succeeded or failed, outputs, quality, row counts</td></tr>
+      <tr><td><code>VerificationStarted</code></td><td>Comparison orchestrator</td><td>Projector</td><td>Status verifying</td></tr>
+      <tr><td><code>ComparisonCompleted</code></td><td>Comparison orchestrator</td><td>Projector</td><td>Status completed, verdict</td></tr>
+      <tr><td><code>OutputsDiscarded</code></td><td>Comparison orchestrator</td><td>Projector</td><td>Removes deleted big files from the run</td></tr>
+      <tr><td class="grp" colspan="4">Benchmarks, rules and housekeeping</td></tr>
+      <tr><td><code>BenchmarkRequested</code></td><td>BenchmarkService</td><td>Benchmark orchestrator</td><td>Runs each size in turn</td></tr>
+      <tr><td><code>BenchmarkProgressed</code></td><td>Benchmark orchestrator</td><td>Projector</td><td>Status running, adds the size's comparison</td></tr>
+      <tr><td><code>BenchmarkCompleted</code></td><td>Benchmark orchestrator</td><td>Projector</td><td>Completed, or failed with the error</td></tr>
+      <tr><td><code>RulesChanged</code></td><td>RulesService</td><td>Live stream only</td><td>Open pages reload the Rules tab. The new version file is already saved by then</td></tr>
+      <tr><td><code>RecordsDeleted</code></td><td>DatasetService, HistoryService</td><td>Live stream only</td><td>Open pages refresh their lists. The records and files are already gone by then</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ SCREENS ============ -->
+<section id="screens">
+  <header>
+    <span class="eyebrow">Using it</span>
+    <h2>Dashboard screens</h2>
+    <p class="lead">Seven tabs for looking, four side panels for doing, two dialogs, and a separate page for single rows. Forms never sit on a tab; they open from a button.</p>
+  </header>
+  <div class="screens">
+    <div class="scr"><h4><i class="sw-tab"></i>Tabs</h4><ul>
+      <li><b>Overview:</b> latest result, 4 key numbers, latest benchmark chart, what's running, recent runs</li>
+      <li><b>Datasets:</b> every dataset with its versions nested under it; per row: view data, Run, Benchmark, Fix columns, Delete</li>
+      <li><b>Data:</b> "Input tables" pages through a dataset's raw rows, 50 at a time; click a value to change it, or the bin to remove a row, then "Save as vN". "Pipeline output" pages through a run's trades, rejects or exposures; click a row for the full JSON</li>
+      <li><b>Runs:</b> one row per run; click for stage bars, data quality, output files and the rules version. "Browse" opens the output in the Data tab, "Track rows" opens the tracker</li>
+      <li><b>Benchmarks:</b> one row per benchmark; click for the chart and stage table</li>
+      <li><b>Rules:</b> correction rules, the 13 reject rules with on/off switches (locked ones say why), a save bar with a note, and every saved version</li>
+      <li><b>Activity:</b> live log of every event, in plain words</li></ul></div>
+    <div class="scr"><h4><i class="sw-panel"></i>Side panels</h4><ul>
+      <li><b>New dataset:</b> generate (size and settings) or upload files</li>
+      <li><b>New run:</b> dataset, engines, source format, checks, filters</li>
+      <li><b>New benchmark:</b> sizes, settings, engines, keep files</li>
+      <li><b>Fix columns:</b> expected column, your column, sample values; saves a new version</li></ul></div>
+    <div class="scr"><h4><i class="sw-dialog"></i>Dialogs and messages</h4><ul>
+      <li><b>Confirm:</b> says exactly what will be deleted or thrown away</li>
+      <li><b>Output preview:</b> first documents of a file, with a download link</li>
+      <li><b>Notifications:</b> short confirmations or errors at the bottom right</li>
+      <li><b>Unsaved changes:</b> on the Data tab, a list of your edits with Undo, "Make it a rule", Discard and Save</li></ul></div>
+    <div class="scr"><h4><i class="sw-page"></i>Separate page</h4><ul>
+      <li><b>Trade tracker</b> (<code>/tracker</code>): pick a run, filter rows by fate, search a trade id, see one row's journey with before and after values</li></ul></div>
+  </div>
+</section>
+
+<!-- ============ FLOWS ============ -->
+<section id="flows">
+  <header>
+    <span class="eyebrow">Using it</span>
+    <h2>Dashboard flows</h2>
+    <p class="lead">Six everyday jobs, one strip each. The label on each arrow is what you press; each box is where you land.</p>
+  </header>
+  <figure>
+    <div class="legend-row" style="padding:16px 18px 0">
+      <span><i class="sw-tab"></i>tab</span><span><i class="sw-panel"></i>side panel</span><span><i class="sw-dialog"></i>dialog or message</span><span><i class="sw-page"></i>separate page</span>
+    </div>
+    <div class="scroll"><svg class="dg" viewBox="0 0 1100 880" style="min-width:960px" role="img" aria-label="Six user flows: compare the engines, fix a bad upload, benchmark sizes, clean up, fix a value as a version or a rule, and switch a reject rule off.">
+      <defs>
+        <marker id="s10a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+      </defs>
+      <!-- 1 -->
+      <text class="t" x="20" y="60">1 · Compare the engines</text><text class="s" x="20" y="78">run both on one dataset</text><text class="s" x="20" y="94">and read the result</text>
+      <rect class="box" x="190" y="40" width="150" height="70" rx="8"/><text class="k" x="202" y="58">TAB</text><text class="t" x="202" y="76">Datasets</text><text class="s" x="202" y="94">a dataset shows Ready</text>
+      <rect class="panelbox" x="372" y="40" width="150" height="70" rx="8"/><text class="k" x="384" y="58">PANEL</text><text class="t" x="384" y="76">New run</text><text class="s" x="384" y="94">dataset preselected</text>
+      <rect class="box" x="554" y="40" width="150" height="70" rx="8"/><text class="k" x="566" y="58">TAB</text><text class="t" x="566" y="76">Runs</text><text class="s" x="566" y="94">row opens, fills live</text>
+      <rect class="evt" x="736" y="40" width="150" height="70" rx="8"/><text class="k" x="748" y="58">DIALOG</text><text class="t" x="748" y="76">Output preview</text><text class="s" x="748" y="94">first 3 documents</text>
+      <rect class="file" x="918" y="40" width="160" height="70" rx="8"/><text class="k" x="930" y="58">PAGE</text><text class="t" x="930" y="76">Trade tracker</text><text class="s" x="930" y="94">every row's fate</text>
+      <path class="edge" d="M340 75H370" marker-end="url(#s10a)"/><text class="lbl mid" x="356" y="32">▶ on a row</text>
+      <path class="edge" d="M522 75H552" marker-end="url(#s10a)"/><text class="lbl mid" x="538" y="32">Start run</text>
+      <path class="edge" d="M704 75H734" marker-end="url(#s10a)"/><text class="lbl mid" x="720" y="32">Trades</text>
+      <path class="edge dash" d="M629 110V126H998V112" marker-end="url(#s10a)"/><text class="lbl mid" x="814" y="130">or Track rows</text>
+
+      <!-- 2 -->
+      <text class="t" x="20" y="205">2 · Fix a bad upload</text><text class="s" x="20" y="223">rename columns, keep</text><text class="s" x="20" y="239">the original untouched</text>
+      <rect class="panelbox" x="190" y="185" width="150" height="70" rx="8"/><text class="k" x="202" y="203">PANEL</text><text class="t" x="202" y="221">New dataset</text><text class="s" x="202" y="239">Upload files</text>
+      <rect class="box" x="372" y="185" width="150" height="70" rx="8"/><text class="k" x="384" y="203">TAB</text><text class="t" x="384" y="221">Datasets</text><text class="s" x="384" y="239">Failed: missing columns</text>
+      <rect class="panelbox" x="554" y="185" width="150" height="70" rx="8"/><text class="k" x="566" y="203">PANEL</text><text class="t" x="566" y="221">Fix columns</text><text class="s" x="566" y="239">matches suggested</text>
+      <rect class="box" x="736" y="185" width="150" height="70" rx="8"/><text class="k" x="748" y="203">TAB</text><text class="t" x="748" y="221">Datasets</text><text class="s" x="748" y="239">v2 nested, then Ready</text>
+      <rect class="panelbox" x="918" y="185" width="160" height="70" rx="8"/><text class="k" x="930" y="203">PANEL</text><text class="t" x="930" y="221">New run</text><text class="s" x="930" y="239">v2 preselected</text>
+      <path class="edge" d="M340 220H370" marker-end="url(#s10a)"/><text class="lbl mid" x="356" y="177">Upload</text>
+      <path class="edge" d="M522 220H552" marker-end="url(#s10a)"/><text class="lbl mid" x="538" y="177">Fix columns</text>
+      <path class="edge" d="M704 220H734" marker-end="url(#s10a)"/><text class="lbl mid" x="720" y="177">Save as v2</text>
+      <path class="edge" d="M886 220H916" marker-end="url(#s10a)"/><text class="lbl mid" x="902" y="177">▶ on v2</text>
+
+      <!-- 3 -->
+      <text class="t" x="20" y="350">3 · Benchmark sizes</text><text class="s" x="20" y="368">see how each engine</text><text class="s" x="20" y="384">scales with size</text>
+      <rect class="box" x="190" y="330" width="150" height="70" rx="8"/><text class="k" x="202" y="348">TAB</text><text class="t" x="202" y="366">Datasets</text><text class="s" x="202" y="384">pick a generated one</text>
+      <rect class="panelbox" x="372" y="330" width="150" height="70" rx="8"/><text class="k" x="384" y="348">PANEL</text><text class="t" x="384" y="366">New benchmark</text><text class="s" x="384" y="384">settings copied</text>
+      <rect class="box" x="554" y="330" width="150" height="70" rx="8"/><text class="k" x="566" y="348">TAB</text><text class="t" x="566" y="366">Benchmarks</text><text class="s" x="566" y="384">bars fill per size</text>
+      <rect class="box" x="736" y="330" width="150" height="70" rx="8"/><text class="k" x="748" y="348">TAB</text><text class="t" x="748" y="366">Overview</text><text class="s" x="748" y="384">headline and chart</text>
+      <path class="edge" d="M340 365H370" marker-end="url(#s10a)"/><text class="lbl mid" x="356" y="322">chart icon</text>
+      <path class="edge" d="M522 365H552" marker-end="url(#s10a)"/><text class="lbl mid" x="538" y="322">add sizes, Start</text>
+      <path class="edge dash" d="M704 365H734" marker-end="url(#s10a)"/><text class="lbl mid" x="720" y="322">updates by itself</text>
+
+      <!-- 4 -->
+      <text class="t" x="20" y="495">4 · Clean up</text><text class="s" x="20" y="513">delete one item, or</text><text class="s" x="20" y="529">clear the whole history</text>
+      <rect class="box" x="190" y="475" width="150" height="70" rx="8"/><text class="k" x="202" y="493">TAB</text><text class="t" x="202" y="511">Runs</text><text class="s" x="202" y="529">or Benchmarks, Datasets</text>
+      <rect class="evt" x="372" y="475" width="150" height="70" rx="8"/><text class="k" x="384" y="493">DIALOG</text><text class="t" x="384" y="511">Confirm delete</text><text class="s" x="384" y="529">says what goes</text>
+      <rect class="evt" x="554" y="475" width="150" height="70" rx="8"/><text class="k" x="566" y="493">MESSAGE</text><text class="t" x="566" y="511">Run deleted.</text><text class="s" x="566" y="529">row and files gone</text>
+      <rect class="evt" x="736" y="475" width="150" height="70" rx="8"/><text class="k" x="748" y="493">MESSAGE</text><text class="t" x="748" y="511">Refused</text><text class="s" x="748" y="529">it is still running</text>
+      <path class="edge" d="M340 510H370" marker-end="url(#s10a)"/><text class="lbl mid" x="356" y="467">trash icon</text>
+      <path class="edge" d="M522 510H552" marker-end="url(#s10a)"/><text class="lbl mid" x="538" y="467">Delete</text>
+      <path class="edge dash" d="M447 545V566H811V547" marker-end="url(#s10a)"/><text class="lbl mid" x="629" y="580">Delete, while it runs</text>
+
+      <!-- 5 -->
+      <text class="t" x="20" y="640">5 · Fix a value</text><text class="s" x="20" y="658">in this dataset, or</text><text class="s" x="20" y="674">everywhere, as a rule</text>
+      <rect class="box" x="190" y="620" width="150" height="70" rx="8"/><text class="k" x="202" y="638">TAB</text><text class="t" x="202" y="656">Data</text><text class="s" x="202" y="674">click a value, type</text>
+      <rect class="evt" x="372" y="620" width="150" height="70" rx="8"/><text class="k" x="384" y="638">ON THE TAB</text><text class="t" x="384" y="656">Unsaved changes</text><text class="s" x="384" y="674">old → new, Undo</text>
+      <rect class="box" x="554" y="620" width="150" height="70" rx="8"/><text class="k" x="566" y="638">TAB</text><text class="t" x="566" y="656">Datasets</text><text class="s" x="566" y="674">new version, then Ready</text>
+      <rect class="panelbox" x="736" y="620" width="150" height="70" rx="8"/><text class="k" x="748" y="638">PANEL</text><text class="t" x="748" y="656">New run</text><text class="s" x="748" y="674">on the new version</text>
+      <rect class="evt" x="918" y="620" width="160" height="70" rx="8"/><text class="k" x="930" y="638">MESSAGE</text><text class="t" x="930" y="656">Saved as rules vN</text><text class="s" x="930" y="674">new runs apply it</text>
+      <path class="edge" d="M340 655H370" marker-end="url(#s10a)"/><text class="lbl mid" x="356" y="612">Enter</text>
+      <path class="edge" d="M522 655H552" marker-end="url(#s10a)"/><text class="lbl mid" x="538" y="612">Save as vN</text>
+      <path class="edge" d="M704 655H734" marker-end="url(#s10a)"/><text class="lbl mid" x="720" y="612">▶ on it</text>
+      <path class="edge dash" d="M447 690V706H998V692" marker-end="url(#s10a)"/><text class="lbl mid" x="722" y="720">or Make it a rule</text>
+
+      <!-- 6 -->
+      <text class="t" x="20" y="785">6 · Switch a rule off</text><text class="s" x="20" y="803">keep trades with a</text><text class="s" x="20" y="819">problem you accept</text>
+      <rect class="box" x="190" y="765" width="150" height="70" rx="8"/><text class="k" x="202" y="783">TAB</text><text class="t" x="202" y="801">Rules</text><text class="s" x="202" y="819">untick a switch</text>
+      <rect class="evt" x="372" y="765" width="150" height="70" rx="8"/><text class="k" x="384" y="783">ON THE TAB</text><text class="t" x="384" y="801">Save bar</text><text class="s" x="384" y="819">add a note</text>
+      <rect class="evt" x="554" y="765" width="150" height="70" rx="8"/><text class="k" x="566" y="783">MESSAGE</text><text class="t" x="566" y="801">Saved as version N</text><text class="s" x="566" y="819">runs from now use it</text>
+      <rect class="panelbox" x="736" y="765" width="150" height="70" rx="8"/><text class="k" x="748" y="783">PANEL</text><text class="t" x="748" y="801">New run</text><text class="s" x="748" y="819">any dataset</text>
+      <rect class="box" x="918" y="765" width="160" height="70" rx="8"/><text class="k" x="930" y="783">TAB</text><text class="t" x="930" y="801">Runs</text><text class="s" x="930" y="819">row shows "rules vN"</text>
+      <path class="edge" d="M340 800H370" marker-end="url(#s10a)"/><text class="lbl mid" x="356" y="757">untick</text>
+      <path class="edge" d="M522 800H552" marker-end="url(#s10a)"/><text class="lbl mid" x="538" y="757">Save as version N</text>
+      <path class="edge" d="M704 800H734" marker-end="url(#s10a)"/><text class="lbl mid" x="720" y="757">New run</text>
+      <path class="edge" d="M886 800H916" marker-end="url(#s10a)"/><text class="lbl mid" x="902" y="757">Start run</text>
+    </svg></div>
+    <figcaption><b>Every flow ends where you can see the result</b>, with no page reloads. Submitting a panel closes it, switches to the right tab and opens the new row, and rows fill in live as events arrive. "Clear history" on the Runs tab follows flow 4 for all finished runs and benchmarks at once; datasets are kept. In flow 5, "Make it a rule" saves the rule straight away (it needs the Rules tab to have no unsaved changes), and the edit stays in your list until you save or discard it.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ API ============ -->
+<section id="api">
+  <header>
+    <span class="eyebrow">Using it</span>
+    <h2>API map</h2>
+    <p class="lead">Every endpoint, grouped by what it's for, with the screen that uses it. Anything marked "API only" works but has no button. The full schema is at <code>/docs</code> while the server runs.</p>
+  </header>
+  <div class="tw"><table>
+    <thead><tr><th>Method</th><th>Path</th><th>Does</th><th>Used by</th></tr></thead>
+    <tbody>
+      <tr><td class="grp" colspan="4">Datasets</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/datasets</code></td><td>List every dataset</td><td>Dashboard</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/datasets/{id}</code></td><td>One dataset</td><td>API only</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/api/datasets/generate</code></td><td>Generate one dataset, or reuse it</td><td>New dataset</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/api/datasets/presets</code></td><td>Generate several sizes</td><td>Create 5k, 50k, 500k</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/api/datasets/upload</code></td><td>Upload CSV or Parquet files</td><td>New dataset · Upload</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/datasets/{id}/columns</code></td><td>Columns, suggested matches, sample values</td><td>Fix columns</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/api/datasets/{id}/versions</code></td><td>Save renamed columns as a new version</td><td>Fix columns · Save</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/datasets/{id}/tables/{table}</code></td><td>One page of a raw table; search by row number or any value</td><td>Data · Input tables</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/api/datasets/{id}/edits</code></td><td>Save changed values and removed rows as a new version</td><td>Data · Save as vN</td></tr>
+      <tr><td><span class="method delete">DELETE</span></td><td><code>/api/datasets/{id}</code></td><td>Delete a dataset and its files</td><td>Trash icon</td></tr>
+      <tr><td class="grp" colspan="4">Runs</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/comparisons</code></td><td>Every run with timings and verdict</td><td>Overview, Runs</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/api/comparisons</code></td><td>Start a run on one or both engines, with the current rules</td><td>New run</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/comparisons/{id}</code></td><td>One run</td><td>API only</td></tr>
+      <tr><td><span class="method delete">DELETE</span></td><td><code>/api/comparisons/{id}</code></td><td>Delete a finished run and its files</td><td>Trash icon</td></tr>
+      <tr><td><span class="method delete">DELETE</span></td><td><code>/api/history</code></td><td>Delete every finished run and benchmark</td><td>Clear history</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/runs</code></td><td>Every engine run</td><td>Trade tracker</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/runs/{id}</code></td><td>One engine run, with the rules it used</td><td>API only</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/runs/{id}/outputs/{name}</code></td><td>First documents of an output</td><td>Output preview</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/runs/{id}/outputs/{name}/page</code></td><td>One page of trades, rejects or exposures, searchable</td><td>Data · Pipeline output</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/runs/{id}/outputs/{name}/download</code></td><td>The whole output file</td><td>Output preview</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/runs/{id}/rows</code></td><td>Rows by fate, searchable</td><td>Trade tracker</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/runs/{id}/rows/{source_row}</code></td><td>One row's journey, before and after</td><td>Trade tracker</td></tr>
+      <tr><td class="grp" colspan="4">Rules</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/rules</code></td><td>Current rules, every reject rule and whether it can be switched off, the columns a rule can name</td><td>Rules</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/rules/history</code></td><td>Every saved version, newest first</td><td>Rules · History</td></tr>
+      <tr><td><span class="method put">PUT</span></td><td><code>/api/rules</code></td><td>Save a new version; nothing is saved if nothing changed</td><td>Rules · Save, Make it a rule</td></tr>
+      <tr><td class="grp" colspan="4">Benchmarks</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/benchmarks</code></td><td>Every benchmark with its table</td><td>Overview, Benchmarks</td></tr>
+      <tr><td><span class="method post">POST</span></td><td><code>/api/benchmarks</code></td><td>Start a benchmark</td><td>New benchmark</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/benchmarks/{id}</code></td><td>One benchmark</td><td>API only</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/benchmarks/{id}/report.md</code></td><td>The table as Markdown</td><td>Document icon</td></tr>
+      <tr><td><span class="method delete">DELETE</span></td><td><code>/api/benchmarks/{id}</code></td><td>Delete a benchmark and its runs</td><td>Trash icon</td></tr>
+      <tr><td class="grp" colspan="4">Pages, live and health</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/</code></td><td>The dashboard</td><td>Browser</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/tracker</code></td><td>The trade tracker page</td><td>Browser</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/api/events</code></td><td>Live event stream (SSE)</td><td>Every page</td></tr>
+      <tr><td><span class="method get">GET</span></td><td><code>/health</code></td><td>Is the server up</td><td>Monitoring</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note"><b>Errors in plain words.</b> 404: the item doesn't exist. 409: it's busy (still running, or still being created), so try again when it's done. 422: the request asks for something impossible, such as a column that doesn't exist or a locked rule switched off; the message says which.</p>
+</section>
+
+<!-- ============ COMMANDS ============ -->
+<section id="commands">
+  <header>
+    <span class="eyebrow">Using it</span>
+    <h2>Commands and settings</h2>
+    <p class="lead">Everything you can type in a terminal, and every setting you can change. <code>make help</code> prints the commands too.</p>
+  </header>
+  <div class="tw"><table>
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>make setup</code></td><td>Checks the tools, installs, creates the 5k, 50k and 500k datasets and runs the tests</td></tr>
+      <tr><td><code>make check-tools</code></td><td>Checks that uv and jq 1.7 or newer are installed</td></tr>
+      <tr><td><code>make install</code></td><td>Installs the Python dependencies</td></tr>
+      <tr><td><code>make run</code></td><td>Starts the dashboard on <code>http://127.0.0.1:8000</code> (tracker on <code>/tracker</code>)</td></tr>
+      <tr><td><code>make test</code></td><td>Runs the test suite</td></tr>
+      <tr><td><code>make lint</code></td><td>Runs ruff (style) and mypy (types)</td></tr>
+      <tr><td><code>make datasets</code></td><td>Creates every preset size, 5k to 5M</td></tr>
+      <tr><td><code>make benchmark</code></td><td>Runs both engines on 5k to 1M rows, checks the outputs match, saves results in <code>data/reports/</code></td></tr>
+      <tr><td><code>make scenarios</code></td><td>Stress tests at 50k rows: 200-level company trees, then 100-step amendment chains</td></tr>
+      <tr><td><code>make reset</code></td><td>Deletes <code>data/runs</code> and <code>data/state</code> (so run records and rule versions too), logs and caches. Keeps datasets and reports</td></tr>
+      <tr><td><code>make clean</code></td><td>Deletes everything generated: the whole <code>data/</code> folder, the virtualenv and caches</td></tr>
+      <tr><td><code>make fresh</code></td><td><code>make clean</code>, then <code>make setup</code></td></tr>
+    </tbody>
+  </table></div>
+  <p class="note"><b>Safety:</b> <code>reset</code>, <code>clean</code> and <code>fresh</code> refuse to run while the server is running, because the server would write its in-memory state back. The command-line tool behind the make targets is <code>python -m app.cli</code> with <code>generate</code> and <code>benchmark</code>; both take <code>--sizes</code>, <code>--seed</code>, <code>--dirty-rate</code>, <code>--depth</code> and <code>--chain</code>.</p>
+
+  <h3>Settings (environment variables)</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Variable</th><th>Default</th><th>What it changes</th></tr></thead>
+    <tbody>
+      <tr><td><code>POC_DATA_DIR</code></td><td><code>data</code></td><td>Where datasets, outputs, records and rules are kept</td></tr>
+      <tr><td><code>POC_MAX_WORKERS</code></td><td><code>2</code></td><td>How many jobs can run at the same time</td></tr>
+      <tr><td><code>POC_VERIFY_FULL_MAX_ROWS</code></td><td><code>200000</code></td><td>Up to this many documents, the check compares every one</td></tr>
+      <tr><td><code>POC_VERIFY_SAMPLE_ROWS</code></td><td><code>50000</code></td><td>Above that, it compares about this many, picked by key</td></tr>
+      <tr><td><code>POC_ENGINE__DUCKDB_THREADS</code></td><td>all cores</td><td>Set to <code>1</code> to compare with jq on one core</td></tr>
+      <tr><td><code>POC_ENGINE__DUCKDB_MEMORY_LIMIT</code></td><td><code>8GB</code></td><td>Above this, DuckDB moves data to disk</td></tr>
+      <tr><td><code>POC_ENGINE__DUCKDB_LEAN</code></td><td><code>false</code></td><td>Streams the output and drops tables early: less memory</td></tr>
+      <tr><td><code>POC_ENGINE__DUCKDB_PRESERVE_INSERTION_ORDER</code></td><td><code>true</code></td><td><code>false</code> is faster and leaner, but output row order changes</td></tr>
+      <tr><td><code>POC_ENGINE__DUCKDB_STORAGE</code></td><td><code>memory</code></td><td><code>disk</code> keeps tables in a database file</td></tr>
+      <tr><td><code>POC_ENGINE__JQ_MAX_RSS_MB</code></td><td><code>12000</code></td><td>jq is stopped above this much memory</td></tr>
+      <tr><td><code>POC_ENGINE__JQ_TIMEOUT_SECONDS</code></td><td><code>3600</code></td><td>jq is stopped after this long</td></tr>
+      <tr><td><code>POC_ENGINE__KEEP_INTERMEDIATES</code></td><td><code>false</code></td><td>Keep each run's <code>work/</code> folder of in-between files, for debugging</td></tr>
+      <tr><td><code>POC_ENGINE__TRACK_ROWS</code></td><td><code>true</code></td><td>Build the per-row status file after each run</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ GLOSSARY ============ -->
+<section id="glossary">
+  <header>
+    <span class="eyebrow">Words</span>
+    <h2>Glossary</h2>
+    <p class="lead">Every word used on this page, in one or two plain sentences.</p>
+  </header>
+  <div class="gloss">
+    <section><h3>The data</h3><dl>
+      <dt>Trade</dt><dd>One deal: who bought or sold what, how much, at what price, on which date. One row in the trades table.</dd>
+      <dt>Counterparty</dt><dd>The company on the other side of the trade. A company can belong to a parent company.</dd>
+      <dt>Ultimate parent</dt><dd>The top company of a counterparty's tree. Exposure is added up per ultimate parent.</dd>
+      <dt>Instrument</dt><dd>The thing that was traded, such as a bond or an option. Some are based on another one, their underlying.</dd>
+      <dt>Book</dt><dd>The desk and trader that own a trade.</dd>
+      <dt>FX rate</dt><dd>How many US dollars one unit of a currency is worth. Used to turn every amount into dollars.</dd>
+      <dt>Amendment chain</dt><dd>The versions of one trade: NEW, then AMEND, maybe CANCEL. Each points at the one before.</dd>
+      <dt>Notional</dt><dd>Quantity times price: the size of a trade in money. <code>notional_usd</code> is the same in US dollars.</dd>
+      <dt>Exposure</dt><dd>Money at risk with one parent company, from the latest version of each trade, cancellations skipped. Gross adds up sizes; net counts buys as plus and sells as minus.</dd>
+      <dt>Dataset</dt><dd>One set of the five tables, generated or uploaded, kept as files with a <code>manifest.json</code> that describes them.</dd>
+      <dt>Dataset version</dt><dd>A new copy of a dataset with fixes applied: renamed columns, changed values or removed rows. The original never changes.</dd>
+      <dt>Expected columns</dt><dd>The column names the pipeline needs for each table. An upload that lacks them fails until you fix its columns.</dd>
+      <dt>CSV / Parquet</dt><dd>CSV is plain text, one row per line. Parquet stores data by column, compressed, so it is smaller and much faster to read.</dd>
+      <dt>NDJSON</dt><dd>One JSON document per line, so a file can be read one document at a time.</dd>
+    </dl></section>
+    <section><h3>The pipeline</h3><dl>
+      <dt>Pipeline</dt><dd>The five stages that turn the input tables into the output files.</dd>
+      <dt>Ingest</dt><dd>Reads the five tables, every column as text, and applies correction rules.</dd>
+      <dt>Clean</dt><dd>Trims spaces, fixes spellings and formats, turns text into dates and numbers, drops exact duplicate rows, fills gaps it safely can.</dd>
+      <dt>Validate</dt><dd>Checks each trade against the reject rules that are on, and lists every problem it has.</dd>
+      <dt>Transform</dt><dd>Joins the tables, walks the company trees and amendment chains, and builds one nested document per trade.</dd>
+      <dt>Aggregate</dt><dd>Adds up exposure per parent company.</dd>
+      <dt>Reject</dt><dd>A trade that broke at least one reject rule. It goes to <code>rejects.ndjson</code> with every reason.</dd>
+      <dt>Warning</dt><dd>A note on a trade that was kept, such as "currency filled in from the instrument".</dd>
+      <dt>Correction rule</dt><dd>"In this column, when the value is A, use B instead." Applied while reading, in every new run, on every dataset.</dd>
+      <dt>Validation switch</dt><dd>Turns one reject rule off for new runs. Trades whose only problems were switched off are kept.</dd>
+      <dt>Locked rule</dt><dd>A reject rule that can't be switched off, because a later stage needs the value it checks.</dd>
+      <dt>Rules version</dt><dd>A saved set of correction rules and switches, numbered 1, 2, 3 … Version 0 is the defaults. Each run keeps a copy of the one it used.</dd>
+      <dt>Run filters</dt><dd>Optional limits on which valid trades are written: trade dates, instrument types, minimum size in dollars, latest versions only.</dd>
+      <dt>Row fate</dt><dd>Where an input row ended up: delivered, rejected, duplicate or filtered out.</dd>
+    </dl></section>
+    <section><h3>Running and measuring</h3><dl>
+      <dt>Engine</dt><dd>One way of running the pipeline: DuckDB (SQL) or jq (JSON programs).</dd>
+      <dt>Run</dt><dd>One dataset through the pipeline on one or both engines, then the output check. The code calls it a comparison.</dd>
+      <dt>Pipeline run</dt><dd>One engine's part of a run, with its own stage times and output files.</dd>
+      <dt>Benchmark</dt><dd>Several sizes, one run each, one after another, to see how each engine scales.</dd>
+      <dt>Output check</dt><dd>Compares both engines' files document by document, matched by key. "Match" means the same documents; numbers may differ by at most 0.011, which covers rounding to cents.</dd>
+      <dt>Sample</dt><dd>Above 200,000 documents the check compares about 50,000, picked by key so both sides pick the same ones.</dd>
+      <dt>Wall time</dt><dd>Time on the clock.</dd>
+      <dt>CPU time</dt><dd>Time added up over all cores. More than wall time means several cores worked at once.</dd>
+      <dt>Peak memory</dt><dd>The most memory a process used at any moment (peak RSS).</dd>
+      <dt>Slowdown</dt><dd>jq's time divided by DuckDB's time, for example "29× longer".</dd>
+      <dt>Row tracker</dt><dd>After a run, records the fate of every input row. The trade tracker page reads it.</dd>
+    </dl></section>
+    <section><h3>The code</h3><dl>
+      <dt>Clean architecture</dt><dd>Code in layers, where inner layers know nothing about outer ones. Here the domain knows nothing about FastAPI, DuckDB or files.</dd>
+      <dt>Domain</dt><dd>The ideas of the app: records, events, interfaces and rule codes, with no libraries.</dd>
+      <dt>Port</dt><dd>An interface the domain defines, such as "something that can save records".</dd>
+      <dt>Adapter</dt><dd>A real class that does what a port describes, such as <code>JsonFileRepository</code>.</dd>
+      <dt>Composition root</dt><dd><code>bootstrap.py</code>: the one place that creates every object and plugs adapters into ports.</dd>
+      <dt>Service</dt><dd>The front desk for one kind of request: checks it, saves it, announces it, answers.</dd>
+      <dt>Event</dt><dd>A small record of something that happened, such as <code>RunFinished</code>.</dd>
+      <dt>Event bus</dt><dd>Hands each event to everything that subscribed to it, in a fixed order.</dd>
+      <dt>Orchestrator</dt><dd>Listens for "…Requested" events and runs the long work in a worker process.</dd>
+      <dt>Projector</dt><dd>Turns events into saved records. The only place a status changes.</dd>
+      <dt>Worker process</dt><dd>A separate Python process for heavy work. A fresh one per job keeps memory numbers clean and a crash contained.</dd>
+      <dt>Repository</dt><dd>Saves and loads one kind of record; here, as JSON files.</dd>
+      <dt>SSE</dt><dd>Server-sent events: one long HTTP response the server keeps writing events into. It's how pages update live.</dd>
+      <dt>202 Accepted</dt><dd>The HTTP answer for "got it, working on it in the background".</dd>
+      <dt>Parity test</dt><dd>A test that runs both engines on the same data and checks they give the same output.</dd>
+    </dl></section>
+  </div>
+</section>
+
+  </main>
+</div>
+
+<script>
+  // highlight the section in view in the contents
+  const links = [...document.querySelectorAll("nav.toc a")];
+  const byId = new Map(links.map((a) => [a.getAttribute("href").slice(1), a]));
+  const nav = document.querySelector("nav.toc");
+  const seen = new Set();
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) seen.add(e.target.id); else seen.delete(e.target.id); });
+    const first = [...document.querySelectorAll("main > section")].find((s) => seen.has(s.id));
+    if (!first) return;
+    links.forEach((a) => a.classList.toggle("on", a === byId.get(first.id)));
+    const active = byId.get(first.id);
+    if (active && getComputedStyle(nav).display === "flex") {
+      const left = active.offsetLeft - nav.offsetLeft;
+      if (left < nav.scrollLeft || left + active.offsetWidth > nav.scrollLeft + nav.clientWidth) nav.scrollTo({ left: left - 16 });
+    }
+  }, { rootMargin: "-10% 0px -70% 0px" });
+  document.querySelectorAll("main > section").forEach((s) => observer.observe(s));
+</script>
+
+</html>

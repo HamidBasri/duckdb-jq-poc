@@ -7,6 +7,8 @@ thousand to 1 million rows, and checked that they produce exactly the same outpu
 **Report:** [hamidbasri.github.io/duckdb-jq-poc](https://hamidbasri.github.io/duckdb-jq-poc/)
 
 **How it's built:** [architecture in ten minutes](https://hamidbasri.github.io/duckdb-jq-poc/architecture.html)
+and the [visual blueprint](https://hamidbasri.github.io/duckdb-jq-poc/blueprint.html) (every part in
+pictures, a one-minute summary and a glossary)
 
 ## Results
 
@@ -33,9 +35,37 @@ make run         # dashboard on http://127.0.0.1:8000, trade tracker on /tracker
 make benchmark   # 5k to 1M rows, both engines, results in data/reports/
 ```
 
-`make help` lists everything else, including `make datasets` (adds 1M and 5M). To clean up,
-`make reset` deletes run outputs, saved state and caches but keeps the datasets, `make clean`
-deletes everything generated, and `make fresh` cleans and sets the project up again from zero.
+## Commands
+
+`make help` prints this list too.
+
+| Command | What it does |
+|---|---|
+| `make setup` | Checks the tools, installs, creates the 5k, 50k and 500k datasets and runs the tests |
+| `make check-tools` | Checks that uv and jq 1.7 or newer are installed |
+| `make install` | Installs the Python dependencies |
+| `make run` | Starts the API and dashboard on `http://127.0.0.1:8000` (trade tracker on `/tracker`) |
+| `make test` | Runs the test suite |
+| `make lint` | Runs ruff and mypy |
+| `make datasets` | Creates every preset size, 5k to 5M (5M needs about 700 MB of disk) |
+| `make benchmark` | Runs both engines on 5k to 1M rows, checks the outputs match, saves results in `data/reports/` |
+| `make scenarios` | Stress tests: 200-level company trees and 100-step amendment chains, at 50k rows |
+| `make reset` | Deletes run outputs, saved state (including rule versions), logs and caches. Keeps datasets and reports |
+| `make clean` | Deletes everything generated: datasets, reports, outputs, virtualenv and caches |
+| `make fresh` | `make clean`, then `make setup` |
+
+`reset`, `clean` and `fresh` refuse to run while the API server is running.
+
+The make targets call a small command-line tool you can also use directly:
+
+```bash
+uv run python -m app.cli generate --sizes 5k 1m --seed 7 --dirty-rate 0.05
+uv run python -m app.cli benchmark --sizes 50k --engines duckdb --format csv --keep-outputs
+```
+
+Both take `--sizes`, `--seed`, `--dirty-rate`, `--depth` (company tree depth) and `--chain`
+(amendment chain length). `benchmark` also takes `--engines`, `--format`, `--no-verify` and
+`--keep-outputs`.
 
 ## What it does
 
@@ -59,6 +89,17 @@ After each comparison a checker matches both outputs document by document. A row
 records where every input row ended up (delivered, rejected, duplicate or filtered out), and the
 trade tracker page lets you search any trade and see its path through the stages. Rejected rows
 show up there as soon as validation is done; the other rows follow when the run finishes.
+
+The dashboard (`make run`) has an overview of the latest results and a tab each for datasets,
+runs, benchmarks and live activity. If an upload's column names don't match the expected ones,
+"Fix columns" suggests a match for each column and saves the result as a new version (v2, v3 and
+so on); the original stays as it was. The Data tab shows every raw input table and every output
+file. You can change raw values or remove rows there, which also saves a new version, and turn any
+change into a rule. On the Rules tab, correction rules change values as data is read (for example
+side `HOLD` to `BUY`), and validation switches turn reject rules off. Each change to the rules is
+saved as a new version, new runs use it, and every run records the version it used. Rules that
+would make the two engines disagree stay locked; `tests/test_parity.py` checks every other one.
+Runs, benchmarks and datasets can be deleted, one at a time or with "Clear history".
 
 ## How it's built
 
@@ -84,12 +125,20 @@ docs/              the report published on GitHub Pages
 |---|---|
 | `POST /api/datasets/generate` | Generate a dataset (`rows`, `seed`, `dirty_rate`, `hierarchy_depth`, `max_chain_length`) |
 | `POST /api/datasets/upload` | Upload CSV or Parquet files; only `trades` is required |
+| `GET /api/datasets/{id}/columns` | Each file's columns next to the expected ones, with suggested matches |
+| `POST /api/datasets/{id}/versions` | Save a copy with the columns renamed (`mapping`); the original is kept |
+| `GET /api/datasets/{id}/tables/{table}` | A page of a raw input table, searchable |
+| `POST /api/datasets/{id}/edits` | Save changed fields and removed rows as a new version |
+| `GET /api/runs/{id}/outputs/{name}/page` | A page of trades, rejects or exposures, searchable |
+| `GET` / `PUT /api/rules` | The current rules; saving creates a new version |
 | `POST /api/comparisons` | Run the pipeline on one or both engines, with optional filters |
 | `GET /api/comparisons/{id}` | Timings per stage, slowdown and the verification result |
 | `GET /api/runs/{id}/rows` | Where each input row ended up |
 | `GET /api/runs/{id}/outputs/{name}/download` | The full output file |
 | `POST /api/benchmarks` | Run several sizes one after another |
 | `GET /api/events` | Live event stream |
+| `DELETE /api/datasets/{id}`, `/api/comparisons/{id}`, `/api/benchmarks/{id}` | Delete one item and its files |
+| `DELETE /api/history` | Delete every finished run and benchmark; datasets are kept |
 
 The full list is at `/docs` while the server runs.
 
