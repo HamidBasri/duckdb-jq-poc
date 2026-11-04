@@ -5,6 +5,7 @@
 # jq 1.7.1 has no trim). make jq downloads it from the official release and checks it against jq.sha256.
 JQ_VERSION := $(shell cat .jq-version)
 JQ := .tools/jq
+PORT ?= 8000
 
 help:  ## list the commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-12s %s\n", $$1, $$2}'
@@ -44,8 +45,8 @@ $(JQ): .jq-version jq.sha256
 install:  ## install Python dependencies
 	uv sync
 
-run:  ## API + dashboard on http://127.0.0.1:8000
-	uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+run:  ## API + dashboard on http://127.0.0.1:8000, or the next free port (make run PORT=9000 to pick)
+	uv run python -m app.serve --port $(PORT)
 
 test:  ## run the test suite
 	uv run pytest -q
@@ -65,7 +66,7 @@ scenarios:  ## stress the hard parts: deep nesting and long back-reference chain
 
 # The API keeps state in memory and would write it back, so never wipe state under a live server.
 server-stopped:
-	@! pgrep -f "uvicorn app.main:app" >/dev/null || { echo "The API server is running. Stop it first."; exit 1; }
+	@! pgrep -f "app\.serve|uvicorn app\.main:app" >/dev/null || { echo "The API server is running. Stop it first."; exit 1; }
 
 reset: server-stopped  ## delete temporary files: run outputs, saved state, logs, caches (keeps datasets and reports)
 	rm -rf data/runs data/state

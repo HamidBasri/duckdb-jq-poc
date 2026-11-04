@@ -1201,7 +1201,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
       <rect class="box" x="36" y="52" width="148" height="48" rx="7"/><text class="t m" x="48" y="72">api/routes/</text><text class="s" x="48" y="90">HTTP endpoints</text>
       <rect class="box" x="196" y="52" width="148" height="48" rx="7"/><text class="t m" x="208" y="72">api/static/</text><text class="s" x="208" y="90">dashboard, tracker</text>
       <rect class="box" x="356" y="52" width="148" height="48" rx="7"/><text class="t m" x="368" y="72">cli.py</text><text class="s" x="368" y="90">make benchmark</text>
-      <rect class="box" x="516" y="52" width="148" height="48" rx="7"/><text class="t m" x="528" y="72">main.py</text><text class="s" x="528" y="90">starts the app</text>
+      <rect class="box" x="516" y="52" width="148" height="48" rx="7"/><text class="t m" x="528" y="72">main.py · serve.py</text><text class="s" x="528" y="90">builds it, finds a port</text>
 
       <rect class="zone" x="20" y="156" width="660" height="206" rx="10"/>
       <text class="k" x="36" y="176">APPLICATION · THE STEPS</text>
@@ -1302,6 +1302,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
       <tr><td><code>EventBus</code></td><td><code>messaging.py</code></td><td>Hands each event to everything that subscribed to it, in the order they subscribed</td></tr>
       <tr><td><code>TaskSupervisor</code></td><td><code>messaging.py</code></td><td>Keeps track of background tasks, logs their failures, stops them at shutdown</td></tr>
       <tr><td><code>StateProjector</code></td><td><code>projections.py</code></td><td>Applies each event to the JSON records. The only place a status changes</td></tr>
+      <tr><td><code>open_listener</code></td><td><code>serve.py</code></td><td>For <code>make run</code>: finds the first free port from 8000 up and hands that open port to the web server, so nothing can take it in between</td></tr>
       <tr><td><code>recover_interrupted</code></td><td><code>projections.py</code></td><td>At startup, marks anything that was in flight when the app stopped as failed</td></tr>
       <tr><td><code>next_number</code></td><td><code>projections.py</code></td><td>Hands out the next Run, Benchmark or Upload number from a counter on disk, so numbers are never reused</td></tr>
       <tr><td><code>PipelineRunner</code></td><td><code>pipeline.py</code></td><td>Runs the five stages in order on one engine and measures each one</td></tr>
@@ -1594,7 +1595,7 @@ td.grp { background: var(--surface-2); font-weight: 700; font-size: 0.8rem; lett
       <tr><td><code>make check-tools</code></td><td>Checks that uv is installed and that <code>.tools/jq</code> is the pinned jq (downloads it if missing)</td></tr>
       <tr><td><code>make jq</code></td><td>Downloads jq 1.8.2, the version in <code>.jq-version</code>, from the official release into <code>.tools/</code>, and checks its SHA-256 against <code>jq.sha256</code></td></tr>
       <tr><td><code>make install</code></td><td>Installs the Python dependencies</td></tr>
-      <tr><td><code>make run</code></td><td>Starts the dashboard on <code>http://127.0.0.1:8000</code> (tracker on <code>/tracker</code>)</td></tr>
+      <tr><td><code>make run</code></td><td>Starts the dashboard on <code>http://127.0.0.1:8000</code> (tracker on <code>/tracker</code>). If 8000 is taken it uses the next free port and prints the address; <code>make run PORT=9000</code> starts the search at 9000</td></tr>
       <tr><td><code>make test</code></td><td>Runs the test suite</td></tr>
       <tr><td><code>make lint</code></td><td>Runs ruff (style) and mypy (types)</td></tr>
       <tr><td><code>make datasets</code></td><td>Creates every preset size, 5k to 5M</td></tr>

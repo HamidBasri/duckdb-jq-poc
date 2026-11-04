@@ -35,7 +35,7 @@ system jq is left as it is.
 
 ```bash
 make setup       # check tools, install, create small datasets, run the tests
-make run         # dashboard on http://127.0.0.1:8000, trade tracker on /tracker
+make run         # dashboard on http://127.0.0.1:8000 (or the next free port), trade tracker on /tracker
 make benchmark   # 5k to 1M rows, both engines, results in data/reports/
 ```
 
@@ -49,7 +49,7 @@ make benchmark   # 5k to 1M rows, both engines, results in data/reports/
 | `make check-tools` | Checks that uv is installed and that `.tools/jq` is the pinned jq (downloads it if missing) |
 | `make jq` | Downloads the pinned jq into `.tools/` and checks its SHA-256 |
 | `make install` | Installs the Python dependencies |
-| `make run` | Starts the API and dashboard on `http://127.0.0.1:8000` (trade tracker on `/tracker`) |
+| `make run` | Starts the API and dashboard on `http://127.0.0.1:8000` (trade tracker on `/tracker`). If 8000 is taken it tries 8001, 8002 and so on, and prints the address. `make run PORT=9000` starts the search at 9000 |
 | `make test` | Runs the test suite |
 | `make lint` | Runs ruff and mypy |
 | `make datasets` | Creates every preset size, 5k to 5M (5M needs about 700 MB of disk) |
